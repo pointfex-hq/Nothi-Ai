@@ -1,0 +1,287 @@
+@import "tailwindcss";
+
+/* ── LawLens Design Tokens ─────────────────────────────── */
+:root {
+  /* Paper & ink */
+  --paper:        #f5f0e8;
+  --paper-light:  #faf7f2;
+  --paper-dark:   #e8e0d0;
+  --ink:          #1a1a18;
+  --ink-muted:    #4a4a45;
+
+  /* Primary: bottle green */
+  --green-deep:   #1b4332;
+  --green-mid:    #2d6a4f;
+  --green-light:  #40916c;
+
+  /* Secondary: brass / ochre */
+  --brass:        #b08d57;
+  --brass-light:  #d4b483;
+  --ochre:        #cc8b3c;
+
+  /* Semantic: flags */
+  --vermillion:   #c0392b;
+  --vermillion-light: #e8534a;
+  --amber:        #d4a017;
+  --amber-light:  #f0c75e;
+  --flag-green:   #27864a;
+  --flag-green-light: #4aa86a;
+
+  /* Desk (3D scene only) */
+  --desk-dark:    #2c2420;
+  --desk-mid:     #3d322a;
+  --desk-light:   #5a4c3f;
+
+  /* Surfaces */
+  --background:   var(--paper);
+  --foreground:   var(--ink);
+  --surface:      var(--paper-light);
+  --border:       #c9c0b0;
+  --border-light: #ddd6c8;
+
+  /* Focus */
+  --focus-ring:   var(--green-mid);
+
+  /* Radius */
+  --radius-sm:    2px;
+  --radius:       3px;
+  --radius-md:    4px;
+}
+
+@theme inline {
+  --color-background:   var(--background);
+  --color-foreground:   var(--foreground);
+  --color-surface:      var(--surface);
+  --color-paper:        var(--paper);
+  --color-paper-light:  var(--paper-light);
+  --color-paper-dark:   var(--paper-dark);
+  --color-ink:          var(--ink);
+  --color-ink-muted:    var(--ink-muted);
+  --color-green-deep:   var(--green-deep);
+  --color-green-mid:    var(--green-mid);
+  --color-green-light:  var(--green-light);
+  --color-brass:        var(--brass);
+  --color-brass-light:  var(--brass-light);
+  --color-ochre:        var(--ochre);
+  --color-vermillion:   var(--vermillion);
+  --color-vermillion-light: var(--vermillion-light);
+  --color-amber:        var(--amber);
+  --color-amber-light:  var(--amber-light);
+  --color-flag-green:   var(--flag-green);
+  --color-flag-green-light: var(--flag-green-light);
+  --color-desk-dark:    var(--desk-dark);
+  --color-desk-mid:     var(--desk-mid);
+  --color-desk-light:   var(--desk-light);
+  --color-border:       var(--border);
+  --color-border-light: var(--border-light);
+  --color-focus-ring:   var(--focus-ring);
+
+  --font-heading:  var(--font-serif), 'Lora', Georgia, serif;
+  --font-sans:     var(--font-inter), 'Inter', sans-serif;
+  --font-serif:    var(--font-serif), 'Lora', Georgia, serif;
+  --font-mono:     var(--font-jetbrains-mono), monospace;
+  --font-bangla:   var(--font-noto-serif-bengali), serif;
+
+  --radius-sm:  2px;
+  --radius:     3px;
+  --radius-md:  4px;
+}
+
+/* ── Base ──────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  overflow-wrap: break-word;
+}
+
+/* Classical Registry Serif Headings */
+h1, h2, h3, h4, h5, h6, .font-heading, .font-serif {
+  font-family: var(--font-serif), 'Lora', Georgia, serif;
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+  overflow-wrap: break-word;
+}
+
+p {
+  text-wrap: pretty;
+  overflow-wrap: break-word;
+}
+
+.font-sans {
+  font-family: var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Paper grain texture overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.03;
+  z-index: 9999;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+}
+
+/* ── Focus styles ──────────────────────────────────────── */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ── Bangla text ───────────────────────────────────────── */
+.bangla, .font-bangla, [lang="bn"] {
+  font-family: var(--font-bangla), 'Noto Serif Bengali', serif !important;
+  line-height: 1.68 !important;
+  overflow-wrap: break-word;
+}
+
+/* ── Monospace for IDs & Long Unbroken Strings ──────────── */
+.mono-id, .font-mono {
+  font-family: var(--font-mono), 'JetBrains Mono', monospace !important;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* ── Hide scrollbar for clean horizontal tabs on mobile ─── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* ── Print ─────────────────────────────────────────────── */
+@media print {
+  body::before {
+    display: none;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  body {
+    background: white;
+    color: black;
+  }
+}
+
+/* ── Reduced motion ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Scrollbar ─────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--paper-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+/* ── Custom Cursor Animations ───────────────────────────── */
+@keyframes cursor-spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes cursor-spin-reverse {
+  from { transform: rotate(360deg); }
+  to { transform: rotate(0deg); }
+}
+@keyframes stamp-expand {
+  0% { transform: scale(0.6); opacity: 0.95; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.animate-spin-slow {
+  animation: cursor-spin-slow 20s linear infinite;
+}
+.animate-spin-reverse {
+  animation: cursor-spin-reverse 14s linear infinite;
+}
+.animate-stamp-expand {
+  animation: stamp-expand 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-muted);
+}
+
+/* ── Animated Logo Keyframes & Classes ───────────────────── */
+@keyframes idleShimmer {
+  0% { stroke-dashoffset: 80; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes lensOrbit {
+  0% { transform: rotate(0deg) translate(0px, 0px); }
+  50% { transform: rotate(180deg) translate(1px, -1px); }
+  100% { transform: rotate(360deg) translate(0px, 0px); }
+}
+@keyframes lensStrokeDash {
+  0% { stroke-dashoffset: 0; }
+  50% { stroke-dashoffset: 30; }
+  100% { stroke-dashoffset: 60; }
+}
+@keyframes checkDraw {
+  0% { stroke-dashoffset: 20; opacity: 0; transform: scale(0.9); }
+  50% { stroke-dashoffset: 0; opacity: 1; transform: scale(1.08); }
+  100% { stroke-dashoffset: 0; opacity: 1; transform: scale(1); }
+}
+@keyframes errorShift {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-1.5px, 0); }
+  75% { transform: translate(1.5px, 0); }
+}
+
+.folder-base {
+  stroke-dasharray: 80;
+  stroke-dashoffset: 0;
+}
+.folder-shimmer {
+  animation: idleShimmer 6s cubic-bezier(0.16, 1, 0.3, 1) 1 forwards;
+}
+.lens-thinking {
+  transform-origin: 20px 20px;
+  animation: lensOrbit 1.6s linear infinite;
+}
+.lens-thinking circle {
+  stroke-dasharray: 20 8;
+  animation: lensStrokeDash 1.6s linear infinite;
+}
+.lens-error {
+  animation: errorShift 0.35s ease-in-out 2;
+}
+.check-draw {
+  stroke-dasharray: 20;
+  animation: checkDraw 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transform-origin: 19px 19px;
+}
