@@ -43,3 +43,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Local Nothi AI data and demo fixtures
+/server/data/
+/output/
+/tmp/
+/.nothi-*-qa/
+
+# Nested app dependency and build output
+node_modules/
+dist-ssr/
+build/
+coverage/
