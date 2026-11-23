@@ -1,0 +1,226 @@
+[
+  {
+    "id": "reg_act_1908_s17",
+    "act": "Registration Act, 1908",
+    "section": "Section 17",
+    "title": "Documents of which registration is compulsory",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 17 of the Registration Act, 1908 lists instruments of which registration is compulsory, including non-testamentary instruments purporting to create, declare, assign, limit or extinguish any right, title or interest in immovable property.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s23",
+    "act": "Registration Act, 1908",
+    "section": "Section 23",
+    "title": "Time for presenting documents",
+    "text": "Subject to the provisions contained in sections 24, 25 and 26, no document other than a will shall be accepted for registration unless presented for that purpose to the proper officer within four months from the date of its execution.",
+    "version": "verified-v1"
+  },
+  {
+    "id": "reg_act_1908_s24",
+    "act": "Registration Act, 1908",
+    "section": "Section 24",
+    "title": "Documents executed by several persons at different times",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 24 addresses situations where a document is executed by several persons at different times.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s25",
+    "act": "Registration Act, 1908",
+    "section": "Section 25",
+    "title": "Provision where delay in presentation is unavoidable",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 25 provides for cases where delay in presentation is caused by urgent necessity or unavoidable accident.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s54",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 54",
+    "title": "Sale defined",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 54 defines 'sale' as a transfer of ownership in exchange for a price paid or promised.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s55",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 55",
+    "title": "Rights and liabilities of buyer and seller",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 55 sets out the respective rights and liabilities of the buyer and seller of immovable property.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s3",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 3",
+    "title": "Interpretation clause",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 3 provides definitions used throughout the Act, including 'immoveable property', 'instrument', 'attested', etc.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s4",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 4",
+    "title": "Offences relating to forged deeds",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 4 of the Land Crime Prevention & Remedy Act, 2023 criminalizes creation, use or possession of forged deeds relating to land.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s5",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 5",
+    "title": "Offences relating to falsification of land records",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 5 addresses falsification, tampering or forgery of land records including khatians.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s6",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 6",
+    "title": "Offences relating to identity fraud in land transactions",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 6 criminalizes impersonation or use of false identity documents in land transactions.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "nidw_rules_r3",
+    "act": "NID Wing Rules",
+    "section": "Rule 3",
+    "title": "Format of National Identity Number",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Rule 3 specifies that a valid National Identity Number shall be 10, 13 or 17 digits in length.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "nidw_rules_r5",
+    "act": "NID Wing Rules",
+    "section": "Rule 5",
+    "title": "Verification of NID holder identity",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Rule 5 specifies the process for verifying that the NID holder's name matches the party named in a deed or transaction document.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s28",
+    "act": "Registration Act, 1908",
+    "section": "Section 28",
+    "title": "Place for presenting documents for registration",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 28 specifies that every document to be registered shall be presented at the registration office within whose jurisdiction the property is situated.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s32",
+    "act": "Registration Act, 1908",
+    "section": "Section 32",
+    "title": "Persons to present documents for registration",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 32 specifies who is competent to present a document for registration.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s6",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 6",
+    "title": "What may be transferred",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 6 specifies the kinds of property that may be transferred.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s7",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 7",
+    "title": "Transfer by persons competent to contract",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 7 describes who is competent to make a transfer of property.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s3",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 3",
+    "title": "Definitions",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 3 provides definitions used in the Land Crime Prevention & Remedy Act, 2023.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s7",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 7",
+    "title": "Penalty for land fraud offences",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 7 provides the penalties for offences under sections 4, 5 and 6.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "nidw_rules_r4",
+    "act": "NID Wing Rules",
+    "section": "Rule 4",
+    "title": "Issuance and renewal of NID cards",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Rule 4 covers the process for issuance and renewal of National ID cards.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s47",
+    "act": "Registration Act, 1908",
+    "section": "Section 47",
+    "title": "Time from which registered document operates",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 47 specifies that a registered document shall operate from the time from which it would have commenced to operate if no registration thereof had been required or made.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s17",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 17",
+    "title": "Direction of transfer",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 17 of TPA addresses the direction of transfer of property.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s49",
+    "act": "Registration Act, 1908",
+    "section": "Section 49",
+    "title": "Effect of non-registration of documents required to be registered",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 49 states that no document required to be registered shall affect any immovable property or be received as evidence of any transaction affecting such property unless it has been registered.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s10",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 10",
+    "title": "Condition restraining alienation",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 10 provides that where property is transferred subject to a condition absolutely restraining the transferee from parting with or disposing of his interest in the property, the condition is void.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s8",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 8",
+    "title": "Investigation and prosecution",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 8 describes the investigation and prosecution framework for land crime offences.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "lcpra_2023_s9",
+    "act": "Land Crime Prevention & Remedy Act, 2023",
+    "section": "Section 9",
+    "title": "Compensation to victims",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 9 addresses compensation payable to victims of land fraud.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "nidw_rules_r6",
+    "act": "NID Wing Rules",
+    "section": "Rule 6",
+    "title": "Corrections and updates to NID records",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Rule 6 specifies the procedure for making corrections and updates to National ID records.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "reg_act_1908_s52",
+    "act": "Registration Act, 1908",
+    "section": "Section 52",
+    "title": "Duty of registering officer",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 52 lays down the duties of a registering officer when a document is presented for registration.",
+    "version": "placeholder-v1"
+  },
+  {
+    "id": "tpa_1882_s52",
+    "act": "Transfer of Property Act, 1882",
+    "section": "Section 52",
+    "title": "Transfer of property pending suit (Lis Pendens)",
+    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 52 of TPA codifies the doctrine of lis pendens—during the pendency of any suit in which any right to immoveable property is directly and specifically in question, the property cannot be transferred or otherwise dealt with by any party to the suit or proceeding.",
+    "version": "placeholder-v1"
+  }
+]
