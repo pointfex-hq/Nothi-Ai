@@ -73,7 +73,7 @@ app.use('/api', (request, response, next) => {
 });
 
 app.get('/api/health', (_request, response) => {
-  response.json({ status: 'ok', version: '1.1.0', service: 'Nothi AI' });
+  response.json({ status: 'ok', version: '1.2.0', service: 'Nothi AI' });
 });
 
 // Mount live API routers
@@ -93,7 +93,7 @@ app.use('/api', (_request, response) => {
 app.get('/', (_request, response) => {
   response.json({
     service: 'Nothi AI Backend Server',
-    version: '1.1.0',
+    version: '1.2.0',
     status: 'ok',
     endpoints: {
       health: '/api/health',

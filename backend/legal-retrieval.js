@@ -4,20 +4,25 @@ const RequestError = require('./request-error');
 const model = 'intfloat/multilingual-e5-small';
 const vectorConfig = { size: 384, distance: 'Cosine' };
 const resultLimit = 5;
-const candidateLimit = 20;
+const candidateLimit = 40;
 const preferredPassagesPerSection = 2;
 const batchSize = 32;
 const passageBytes = 1600;
 const requiredFields = ['passage', 'lawTitle', 'section', 'jurisdiction', 'officialUrl'];
-const optionalFields = ['version', 'effectiveDate'];
+const versionFields = ['version', 'effectiveDate'];
+const verificationFields = ['retrievedDate', 'amendment', 'amendmentUrl'];
+const optionalFields = [...versionFields, ...verificationFields];
 const sourceFields = [...requiredFields, ...optionalFields];
+const citationFields = [...sourceFields, 'subsection'];
+const searchFields = [...citationFields, 'context', 'fragmentIds', 'relatedIds'];
+const sectionFields = ['lawTitle', 'jurisdiction', 'section', 'officialUrl'];
 
 function validOfficialUrl(value) {
   const url = URL.parse(value);
   return url && ['https:', 'http:'].includes(url.protocol) && !url.username && !url.password;
 }
 
-function splitPassage(passage) {
+function splitPassage(passage, limit = passageBytes) {
   const chunks = [];
   let start = 0;
   let end = 0;
@@ -26,7 +31,7 @@ function splitPassage(passage) {
 
   for (const character of passage) {
     const size = Buffer.byteLength(character);
-    if (bytes + size > passageBytes) {
+    if (bytes + size > limit) {
       const boundary = lastSpace > start ? lastSpace : end;
       chunks.push(passage.slice(start, boundary));
       start = boundary;
@@ -34,7 +39,7 @@ function splitPassage(passage) {
     }
     end += character.length;
     bytes += size;
-    if (/\s/u.test(character) && bytes >= passageBytes / 2) lastSpace = end;
+    if (/\s/u.test(character) && bytes >= limit / 2) lastSpace = end;
   }
   chunks.push(passage.slice(start));
   return chunks;
@@ -45,6 +50,80 @@ function pointId(fingerprint, chunkIndex) {
   bytes[6] = (bytes[6] & 0x0f) | 0x80;
   bytes[8] = (bytes[8] & 0x3f) | 0x80;
   return bytes.toString('hex').replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
+}
+
+function combinePassage(context, text) {
+  return context ? `${context}\n\n${text}` : text;
+}
+
+function numberedParts(passage, marker) {
+  const matches = [...passage.matchAll(marker)];
+  return {
+    opening: passage.slice(0, matches[0]?.index ?? passage.length).trim(),
+    parts: matches.map((match, index) => ({
+      number: match[1],
+      text: passage.slice(match.index, matches[index + 1]?.index).trim(),
+    })),
+  };
+}
+
+function clauseGroups(source, closingNote) {
+  let text = source.passage;
+  let note;
+  if (closingNote) {
+    const start = text.lastIndexOf('\n' + closingNote);
+    if (start === -1) throw new RequestError(400, 'The closing note could not be found on its own line.');
+    note = text.slice(start + 1).trim();
+    text = text.slice(0, start);
+  }
+  const section = numberedParts(text, /^[ \t]*(\(\d+\))(?=[ \t]|\r?$)/gmu);
+  if (!section.parts.length) throw new RequestError(400, 'The section needs numbered paragraphs on separate lines.');
+
+  const groups = section.parts.flatMap(part => {
+    const clauses = numberedParts(part.text, /^[ \t]*(\([a-z]\))(?=[ \t]|\r?$)/gmu);
+    const label = source.section + part.number;
+    if (!clauses.parts.length) return [{ subsection: label, context: section.opening, text: part.text }];
+    const context = combinePassage(section.opening, clauses.opening);
+    return clauses.parts.map(clause => ({ subsection: label + clause.number, context, text: clause.text }));
+  });
+  if (note) groups.push({ context: section.opening, text: note });
+  return groups;
+}
+
+function indexedPoint(id, payload, searchablePassage) {
+  return {
+    id,
+    payload,
+    vector: {
+      model,
+      text: `passage: ${payload.lawTitle}\n${payload.subsection ?? payload.section}\n${payload.jurisdiction}\n${searchablePassage}`,
+    },
+  };
+}
+
+function clausePoints(source, fingerprint, closingNote, retrieveTogether) {
+  const points = clauseGroups(source, closingNote).flatMap(({ subsection, context, text }, groupIndex) => {
+    // Reserve embedding space for the actual clause even when its opening language is long.
+    const searchableContext = splitPassage(context, passageBytes / 2)[0];
+    const bodyLimit = passageBytes - Buffer.byteLength(searchableContext, 'utf8') - 2;
+    const fragments = splitPassage(text, bodyLimit);
+    const fragmentIds = fragments.map((_, index) => pointId(`${fingerprint}:${groupIndex}`, index));
+    return fragments.map((fragment, index) => {
+      const location = subsection ? { subsection } : {};
+      const payload = fragments.length === 1
+        ? { ...source, ...location, passage: combinePassage(context, fragment) }
+        : { ...source, ...location, passage: fragment, context, fragmentIds };
+      return indexedPoint(fragmentIds[index], payload, combinePassage(searchableContext, fragment));
+    });
+  });
+  if (retrieveTogether) {
+    if (points.length < 2 || points.length > 4 || points.some(point => !point.payload.subsection || point.payload.fragmentIds)) {
+      throw new RequestError(400, 'Linked retrieval needs two to four short subsections.');
+    }
+    const relatedIds = points.map(point => point.id);
+    for (const point of points) point.payload.relatedIds = relatedIds;
+  }
+  return points;
 }
 
 function pointsFromCorpus(corpus) {
@@ -63,22 +142,26 @@ function pointsFromCorpus(corpus) {
       }
       source[field] = field === 'passage' ? value : value.trim();
     }
-    if (!validOfficialUrl(source.officialUrl)) {
+    if (!validOfficialUrl(source.officialUrl) || (source.amendmentUrl && !validOfficialUrl(source.amendmentUrl))) {
       throw new RequestError(400, `Corpus entry ${index + 1} needs an official HTTP or HTTPS URL.`);
     }
 
-    const fingerprint = createHash('sha256').update(JSON.stringify(source)).digest('hex');
-    for (const [chunkIndex, passage] of splitPassage(source.passage).entries()) {
-      const id = pointId(fingerprint, chunkIndex);
-      points.set(id, {
-        id,
-        payload: { ...source, passage },
-        vector: {
-          model,
-          text: `passage: ${source.lawTitle}\n${source.section}\n${source.jurisdiction}\n${passage}`,
-        },
-      });
+    const { splitByClause, closingNoteStartsWith, retrieveTogether } = entry;
+    if ((splitByClause !== undefined && typeof splitByClause !== 'boolean') ||
+        (closingNoteStartsWith !== undefined && (!splitByClause || typeof closingNoteStartsWith !== 'string' || !closingNoteStartsWith.trim())) ||
+        (retrieveTogether !== undefined && (typeof retrieveTogether !== 'boolean' || (retrieveTogether && !splitByClause)))) {
+      throw new RequestError(400, `Corpus entry ${index + 1} has an invalid clause layout.`);
     }
+    // Source verification can be refreshed without changing any existing point ID.
+    const contentVersion = Object.fromEntries(Object.entries(source).filter(([field]) => !verificationFields.includes(field)));
+    const hash = createHash('sha256').update(JSON.stringify(contentVersion));
+    if (splitByClause) hash.update(JSON.stringify(['numbered-clauses-v1', closingNoteStartsWith]));
+    const fingerprint = hash.digest('hex');
+    const indexed = splitByClause
+      ? clausePoints(source, fingerprint, closingNoteStartsWith, retrieveTogether)
+      : splitPassage(source.passage).map((passage, chunkIndex) =>
+        indexedPoint(pointId(fingerprint, chunkIndex), { ...source, passage }, passage));
+    for (const point of indexed) points.set(point.id, point);
   }
   return [...points.values()];
 }
@@ -95,7 +178,7 @@ async function qdrantRequest(path, { method = 'GET', body, ignoreStatus } = {}) 
   const apiKey = process.env.QDRANT_API_KEY?.trim();
   const configuredUrl = process.env.QDRANT_URL?.trim();
   if (!apiKey || !configuredUrl) {
-    throw new RequestError(503, 'Set QDRANT_URL and QDRANT_API_KEY in backend/.env to use Legal search.');
+    throw new RequestError(503, 'Set QDRANT_URL and QDRANT_API_KEY in server/.env to use Legal search.');
   }
   const url = URL.parse(configuredUrl);
   if (!url || url.protocol !== 'https:' || !url.hostname.endsWith('.cloud.qdrant.io') ||
@@ -170,12 +253,60 @@ async function ingestLegalCorpus(corpus) {
   return points.length;
 }
 
+async function sectionPointIds(path, source) {
+  const ids = [];
+  let offset;
+  do {
+    // Cloud collections may require payload indexes for filtered scrolls.
+    const page = await qdrantRequest(path + '/points/scroll', {
+      method: 'POST', body: { offset, limit: 100, with_payload: sectionFields, with_vector: false },
+    });
+    if (!Array.isArray(page.points) || (offset != null && page.next_page_offset === offset)) {
+      throw new RequestError(502, 'Qdrant Cloud did not return a usable list of legal records.');
+    }
+    ids.push(...page.points.filter(({ payload }) => sectionFields.every(field => payload?.[field] === source[field]))
+      .map(point => point.id));
+    offset = page.next_page_offset;
+  } while (offset != null);
+  return ids;
+}
+
+async function replaceLegalSection(source) {
+  const points = pointsFromCorpus([source]);
+  const path = collectionPath();
+  await ensureCollection(path);
+  const wanted = new Set(points.map(point => point.id));
+  const scope = points[0].payload;
+  const existing = await sectionPointIds(path, scope);
+  const stale = existing.filter(id => !wanted.has(id));
+  const operations = [];
+  for (let start = 0; start < points.length; start += batchSize) {
+    operations.push({ upsert: { points: points.slice(start, start + batchSize) } });
+  }
+  if (stale.length) operations.push({ delete: { points: stale } });
+  const result = await qdrantRequest(path + '/points/batch?wait=true&ordering=strong', {
+    method: 'POST', body: { operations },
+  });
+  if (!Array.isArray(result) || result.length !== operations.length || result.some(update => update.status !== 'completed')) {
+    throw new RequestError(502, 'Qdrant Cloud did not confirm the section replacement. Rerun the same command to verify it.');
+  }
+  const verified = await sectionPointIds(path, scope);
+  if (verified.length !== wanted.size || !verified.every(id => wanted.has(id))) {
+    throw new RequestError(502, 'The section still contains unexpected records. Rerun the replacement to reconcile it.');
+  }
+  return { count: wanted.size, removed: stale.length };
+}
+
 function selectPassages(sources) {
   const counts = new Map();
+  const seenGroups = new Set();
   const preferred = [];
   const additional = [];
   for (const source of sources) {
-    const section = JSON.stringify([source.jurisdiction, source.lawTitle, source.section]);
+    const group = source.fragmentIds?.[0];
+    if (group && seenGroups.has(group)) continue;
+    if (group) seenGroups.add(group);
+    const section = JSON.stringify([source.fields.jurisdiction, source.fields.lawTitle, source.fields.section]);
     const count = counts.get(section) ?? 0;
     if (count < preferredPassagesPerSection) {
       preferred.push(source);
@@ -187,14 +318,73 @@ function selectPassages(sources) {
   return [...preferred, ...additional].slice(0, resultLimit);
 }
 
+function parseHit(point) {
+  const { id, payload, score } = point ?? {};
+  if (!requiredFields.every(field => typeof payload?.[field] === 'string' && payload[field].trim()) ||
+      !validOfficialUrl(payload.officialUrl)) return null;
+
+  const fields = {};
+  for (const field of citationFields) {
+    if (typeof payload[field] === 'string') fields[field] = payload[field];
+  }
+  const { fragmentIds, context, relatedIds } = payload;
+  if (fragmentIds !== undefined && (!Array.isArray(fragmentIds) || fragmentIds.length < 2 ||
+      new Set(fragmentIds).size !== fragmentIds.length || !fragmentIds.every(id => typeof id === 'string') ||
+      !fragmentIds.includes(id) || typeof context !== 'string')) return null;
+  if (relatedIds !== undefined && (!Array.isArray(relatedIds) || relatedIds.length < 2 || relatedIds.length > 4 ||
+      new Set(relatedIds).size !== relatedIds.length || !relatedIds.every(id => typeof id === 'string') ||
+      !relatedIds.includes(id) || fragmentIds || !fields.subsection)) return null;
+  return { id, fields, score, context, fragmentIds, relatedIds };
+}
+
+async function assemblePassages(path, candidates) {
+  const selected = selectPassages(candidates);
+  const byId = new Map(candidates.map(candidate => [candidate.id, candidate]));
+  const missing = [...new Set(selected.flatMap(candidate => candidate.fragmentIds ?? candidate.relatedIds ?? []))]
+    .filter(id => !byId.has(id));
+  if (missing.length) {
+    const points = await qdrantRequest(path + '/points', {
+      method: 'POST', body: { ids: missing, with_payload: searchFields, with_vector: false },
+    });
+    if (!Array.isArray(points)) throw new RequestError(502, 'Qdrant Cloud did not return the adjacent legal excerpts.');
+    for (const point of points) {
+      const fragment = parseHit(point);
+      if (fragment) byId.set(fragment.id, fragment);
+    }
+  }
+
+  const withRelated = new Map(selected.map(point => [point.id, point]));
+  for (const { fields, relatedIds } of selected) {
+    for (const id of relatedIds ?? []) {
+      const related = byId.get(id);
+      if (related && JSON.stringify(related.relatedIds) === JSON.stringify(relatedIds) &&
+          [...sectionFields, ...versionFields].every(field => related.fields[field] === fields[field])) {
+        withRelated.set(id, related);
+      }
+    }
+  }
+
+  return [...withRelated.values()].flatMap(({ fields, score, fragmentIds, context }) => {
+    if (!fragmentIds) return [{ score, ...fields }];
+    const fragments = fragmentIds.map(id => byId.get(id));
+    const sameGroup = fragments.every(fragment => fragment && fragment.context === context &&
+      JSON.stringify(fragment.fragmentIds) === JSON.stringify(fragmentIds) &&
+      citationFields.every(field => field === 'passage' || fragment.fields[field] === fields[field]));
+    if (!sameGroup) return [];
+    const passage = combinePassage(context, fragments.map(fragment => fragment.fields.passage).join(''));
+    return [{ score, ...fields, passage }];
+  });
+}
+
 async function searchLegal(question) {
-  const result = await qdrantRequest(collectionPath() + '/points/query', {
+  const path = collectionPath();
+  const result = await qdrantRequest(path + '/points/query', {
     method: 'POST',
     ignoreStatus: 404,
     body: {
       query: { model, text: `query: ${question}` },
       limit: candidateLimit,
-      with_payload: sourceFields,
+      with_payload: searchFields,
     },
   });
   if (result === null) {
@@ -204,18 +394,7 @@ async function searchLegal(question) {
     throw new RequestError(502, 'Qdrant Cloud did not return a usable search result.');
   }
 
-  const sources = result.points.slice(0, candidateLimit).flatMap(point => {
-    const { payload: fields, score } = point ?? {};
-    if (!requiredFields.every(field => typeof fields?.[field] === 'string' && fields[field].trim()) ||
-        !validOfficialUrl(fields.officialUrl)) return [];
-
-    const source = { score };
-    for (const field of sourceFields) {
-      if (typeof fields[field] === 'string') source[field] = fields[field];
-    }
-    return [source];
-  });
-  return selectPassages(sources);
+  return assemblePassages(path, result.points.slice(0, candidateLimit).map(parseHit).filter(Boolean));
 }
 
-module.exports = { ingestLegalCorpus, listCollections, searchLegal };
+module.exports = { ingestLegalCorpus, listCollections, replaceLegalSection, searchLegal };

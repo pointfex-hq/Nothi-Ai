@@ -1,7 +1,7 @@
 const { readFile } = require('node:fs/promises');
 const path = require('node:path');
 const { loadEnvFile } = require('node:process');
-const { ingestLegalCorpus, listCollections, searchLegal } = require('../legal-retrieval');
+const { ingestLegalCorpus, listCollections, replaceLegalSection, searchLegal } = require('../legal-retrieval');
 const RequestError = require('../request-error');
 
 function parseCorpus(text) {
@@ -28,6 +28,14 @@ async function main() {
     const corpus = await readFile(input, 'utf8');
     const count = await ingestLegalCorpus(parseCorpus(corpus));
     console.log(`Indexed ${count} legal passage records in Qdrant Cloud.`);
+  } else if (command === 'replace-section' && input && expectedSection && !extra.length) {
+    const corpus = parseCorpus(await readFile(input, 'utf8'));
+    const entries = Array.isArray(corpus) ? corpus.filter(entry => typeof entry?.section === 'string' &&
+      entry.section.trim() === expectedSection &&
+      (!expectedLaw || (typeof entry.lawTitle === 'string' && entry.lawTitle.trim() === expectedLaw))) : [];
+    if (entries.length !== 1) throw new RequestError(400, 'Select exactly one source section from the corpus file.');
+    const { count, removed } = await replaceLegalSection(entries[0]);
+    console.log(`Verified ${count} replacement records, with ${removed} old records removed.`);
   } else if (command === 'search' && input?.trim() && input.length <= 2000 && !extra.length) {
     const results = await searchLegal(input.trim());
     console.log(JSON.stringify(results, null, 2));
@@ -37,7 +45,7 @@ async function main() {
       console.log('Verified the expected section in the search results.');
     }
   } else {
-    throw new RequestError(400, 'Use legal.js collections, legal.js ingest <corpus-file>, or legal.js search <question> [expected-section] [expected-law-title].');
+    throw new RequestError(400, 'Use legal.js collections, legal.js ingest <corpus-file>, legal.js replace-section <corpus-file> <section> [law-title], or legal.js search <question> [expected-section] [expected-law-title].');
   }
 }
 

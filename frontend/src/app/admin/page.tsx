@@ -329,7 +329,7 @@ export default function AdminPanelPage() {
                   ADMINISTRATOR
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-paper border border-border text-ink-muted">
-                  v1.1
+                  v1.2
                 </span>
               </div>
               <p className="text-xs sm:text-sm text-ink-muted font-sans mt-1">

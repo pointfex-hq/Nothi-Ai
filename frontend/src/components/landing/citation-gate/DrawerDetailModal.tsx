@@ -68,7 +68,7 @@ export function DrawerDetailModal({
           </div>
           <div>
             <span className="text-ink-muted block text-[10px] uppercase">Corpus Version</span>
-            <span className="text-ink">{section?.version || 'v1.1'}</span>
+            <span className="text-ink">{section?.version || 'v1.2'}</span>
           </div>
           <div>
             <span className="text-ink-muted block text-[10px] uppercase">Integrity Status</span>
