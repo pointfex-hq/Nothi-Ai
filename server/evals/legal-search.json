@@ -1,0 +1,125 @@
+{
+  "title": "Nothi AI Legal search bilingual evaluation",
+  "lawTitle": "The Transfer of Property Act, 1882",
+  "jurisdiction": "Bangladesh",
+  "maxOutputTokens": 500,
+  "expectedAnswerLanguage": "Match the question language, including abstentions. For Bangla, check the prose for stray words in unrelated languages. Exclude the app's official citation labels from that check.",
+  "indexedSections": [
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "54",
+    "54A",
+    "55"
+  ],
+  "sources": {
+    "9": "https://bdlaws.minlaw.gov.bd/act-48/section-25421.html",
+    "54": "https://bdlaws.minlaw.gov.bd/act-48/act-chapter-print-162.html",
+    "55": "https://bdlaws.minlaw.gov.bd/act-48/section-16096.html",
+    "54A": "https://bdlaws.minlaw.gov.bd/act-48/section-16095.html"
+  },
+  "scenarios": [
+    {
+      "id": "oral-transfer",
+      "questions": {
+        "en": "When does Section 9 allow a transfer of property without writing?",
+        "bn": "৯ ধারা অনুযায়ী কখন লিখিত দলিল ছাড়া সম্পত্তি হস্তান্তর করা যায়?"
+      },
+      "expected": "answer",
+      "claims": [
+        {
+          "id": "writing-condition",
+          "section": "9",
+          "statement": "Writing may be omitted if the law does not expressly require it for that transfer.",
+          "evidenceContains": [
+            "not expressly required by law"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "sale-and-contract",
+      "questions": {
+        "en": "How does a sale of immovable property differ from a contract for sale, and what form does the contract require even if the buyer already has possession?",
+        "bn": "স্থাবর সম্পত্তির বিক্রয় ও বিক্রয়ের চুক্তির মধ্যে পার্থক্য কী? ক্রেতা ইতিমধ্যে দখল পেয়ে থাকলেও চুক্তিটি কীভাবে করতে হয়?"
+      },
+      "expected": "answer",
+      "passCriteria": "Every claim and required answer element must be present. Check that Section 54 supports the sale and contract distinction and Section 54A supports the form requirement, with a citation next to each claim. Failing a price alternative, attribution, or language check fails the case.",
+      "claims": [
+        {
+          "id": "sale-transfers-ownership",
+          "section": "54",
+          "statement": "A sale transfers ownership in exchange for a price that is paid, promised, or partly paid and partly promised.",
+          "requiredAnswerElements": [
+            "The sale transfers ownership in exchange for a price.",
+            "The price can be paid in full.",
+            "The price can be promised in full.",
+            "Part of the price can be paid and the rest promised. Paid or promised alone does not cover this alternative."
+          ],
+          "evidenceContains": [
+            "transfer of ownership",
+            "price paid or promised or part-paid and part-promised"
+          ]
+        },
+        {
+          "id": "agreement-no-interest",
+          "section": "54",
+          "statement": "A contract for sale agrees to a future sale on settled terms and itself creates no interest in or charge on the property.",
+          "evidenceContains": [
+            "terms settled",
+            "create any interest in or charge"
+          ]
+        },
+        {
+          "id": "contract-form",
+          "section": "54A",
+          "statement": "The contract must be in writing and registered under the Registration Act, 1908, including when the buyer is already in possession.",
+          "evidenceContains": [
+            "instrument in writing and registered",
+            "whether or not the transferee has taken possession"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "post-transfer-damage",
+      "questions": {
+        "en": "Under the Act’s default rules, who bears the loss if the property is damaged after ownership passes to the buyer and the seller did not cause the damage?",
+        "bn": "আইনের সাধারণ নিয়ম অনুযায়ী, মালিকানা ক্রেতার কাছে যাওয়ার পর বিক্রেতার কারণে নয় এমন ক্ষতি হলে সেই ক্ষতি কে বহন করবে?"
+      },
+      "expected": "answer",
+      "claims": [
+        {
+          "id": "buyer-bears-loss",
+          "section": "55",
+          "subsection": "55(5)(c)",
+          "statement": "Under the default rule, the buyer bears the loss after ownership passes if the seller did not cause the damage.",
+          "evidenceContains": [
+            "to bear any loss",
+            "not caused by the seller"
+          ],
+          "evidenceMaySpanAdjacentPassages": true,
+          "contextEvidenceContains": [
+            "In the absence of a contract to the contrary"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "lease-notice-outside-corpus",
+      "questions": {
+        "en": "What notice period does the Act require to end a month-to-month lease?",
+        "bn": "মাসে মাসে নবায়ন হওয়া একটি ইজারা শেষ করতে আইন অনুযায়ী কত দিনের নোটিশ দিতে হয়?"
+      },
+      "expected": "abstain",
+      "claims": [],
+      "expectedAbstention": {
+        "en": "I could not find support for an answer in the retrieved legal sources.",
+        "bn": "পাওয়া আইনি উৎসগুলোতে এই প্রশ্নের উত্তর দেওয়ার মতো তথ্য নেই।"
+      },
+      "coverageGap": "The collection has no lease-termination provision prescribing a notice period. An answer should acknowledge insufficient evidence and give no period or supporting citation."
+    }
+  ]
+}
