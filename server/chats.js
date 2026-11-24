@@ -6,10 +6,11 @@ const { sendAskQuotaError } = require('./ask-quota');
 const { extractPdf } = require('./pdf');
 const { extractPhoto } = require('./ocr');
 const { requireUser } = require('./auth');
+const chatStore = require('./chat-store');
 const RequestError = require('./request-error');
 
 const router = express.Router();
-const chatsByUser = new Map();
+const activityByChat = new Map();
 const readFile = express.raw({
   type: ['application/pdf', 'image/jpeg', 'image/png'],
   limit: '5mb',
@@ -17,12 +18,36 @@ const readFile = express.raw({
 });
 const readJson = express.json({ limit: '256kb' });
 
-function summarize({ id, title, updatedAt }) {
-  return { id, title, updatedAt };
+function activityKey(ownerId, chatId) {
+  return ownerId + ':' + chatId;
 }
 
-function requireIdle(chat) {
-  if (chat.busy) throw new RequestError(409, 'Wait for the current operation to finish.');
+function chatResponse(ownerId, { id, title, updatedAt, attachments, messages }) {
+  const activity = activityByChat.get(activityKey(ownerId, id));
+  return {
+    id, title, updatedAt, attachments, messages,
+    uploads: activity?.uploads ?? { pdf: null, photo: null },
+    busy: activity?.busy ?? null,
+  };
+}
+
+function requireIdle(ownerId, chatId) {
+  if (activityByChat.get(activityKey(ownerId, chatId))?.busy) {
+    throw new RequestError(409, 'Wait for the current operation to finish.');
+  }
+}
+
+function beginActivity(ownerId, chatId, busy) {
+  const key = activityKey(ownerId, chatId);
+  const activity = activityByChat.get(key) ?? { uploads: { pdf: null, photo: null } };
+  activity.busy = busy;
+  activityByChat.set(key, activity);
+  return activity;
+}
+
+function finishActivity(ownerId, chatId, activity) {
+  activity.busy = null;
+  if (!activity.uploads.pdf && !activity.uploads.photo) activityByChat.delete(activityKey(ownerId, chatId));
 }
 
 function resetAttachmentContext(chat) {
@@ -33,51 +58,41 @@ function resetAttachmentContext(chat) {
   chat.title = title.length > 72 ? title.slice(0, 71) + '…' : title || 'New chat';
 }
 
-router.use(requireUser, (_request, response, next) => {
-  const userId = response.locals.user.id;
-  if (!chatsByUser.has(userId)) chatsByUser.set(userId, new Map());
-  response.locals.chats = chatsByUser.get(userId);
-  next();
-});
+router.use(requireUser);
 
 router.get('/', (_request, response) => {
-  const { chats } = response.locals;
-  response.json([...chats.values()].reverse().sort((a, b) => b.updatedAt - a.updatedAt).map(summarize));
+  response.json(chatStore.listChats(response.locals.user.id));
 });
 
 router.post('/', (_request, response) => {
-  const chat = {
-    id: randomUUID(),
-    title: 'New chat',
-    updatedAt: Date.now(),
-    attachments: { pdf: null, photo: null },
-    uploads: { pdf: null, photo: null },
-    messages: [],
-    busy: null,
-  };
-  response.locals.chats.set(chat.id, chat);
-  response.status(201).json(chat);
+  const { id: ownerId } = response.locals.user;
+  response.status(201).json(chatResponse(ownerId, chatStore.createChat(ownerId)));
 });
 
 router.param('chatId', (_request, response, next, id) => {
-  const chat = response.locals.chats.get(id);
-  if (!chat) return next(new RequestError(404, 'This chat is no longer available. Chats are kept while the server is running.'));
-  response.locals.chat = chat;
+  chatStore.ensureChat(response.locals.user.id, id);
   next();
 });
 
-router.get('/:chatId', (_request, response) => response.json(response.locals.chat));
+router.get('/:chatId', (request, response) => {
+  const { id: ownerId } = response.locals.user;
+  response.json(chatResponse(ownerId, chatStore.readChat(ownerId, request.params.chatId)));
+});
 
-router.delete('/:chatId', (_request, response) => {
-  const { chat, chats } = response.locals;
-  requireIdle(chat);
-  chats.delete(chat.id);
-  response.json({ id: chat.id });
+router.delete('/:chatId', (request, response) => {
+  const { id: ownerId } = response.locals.user;
+  const { chatId } = request.params;
+  requireIdle(ownerId, chatId);
+  chatStore.deleteChat(ownerId, chatId);
+  activityByChat.delete(activityKey(ownerId, chatId));
+  response.json({ id: chatId });
 });
 
 router.post('/:chatId/document', readFile, async (request, response) => {
-  const { chat } = response.locals;
-  requireIdle(chat);
+  const { id: ownerId } = response.locals.user;
+  const { chatId } = request.params;
+  requireIdle(ownerId, chatId);
+  const chat = chatStore.readChat(ownerId, chatId);
   if (!Buffer.isBuffer(request.body) || !request.body.length) {
     throw new RequestError(400, 'Choose one PDF, JPG, JPEG, or PNG.');
   }
@@ -93,42 +108,58 @@ router.post('/:chatId/document', readFile, async (request, response) => {
   }
 
   const kind = request.is('application/pdf') ? 'pdf' : 'photo';
-  chat.busy = 'extracting';
-  chat.uploads[kind] = { name, status: 'processing' };
+  const activity = beginActivity(ownerId, chatId, 'extracting');
+  activity.uploads[kind] = { name, status: 'processing' };
   let failure;
   try {
-    const pages = kind === 'pdf'
-      ? await extractPdf(request.body)
-      : [{ pageNumber: 1, text: await extractPhoto(request.body) }];
-    chat.attachments[kind] = { name, kind, pages };
-    chat.uploads[kind] = null;
-    resetAttachmentContext(chat);
-  } catch (error) {
-    failure = error instanceof RequestError ? error : new RequestError(500, 'Could not extract text from this file. Try again.');
-    chat.uploads[kind] = { name, status: 'failed', error: failure.message };
+    let pages;
+    try {
+      pages = kind === 'pdf'
+        ? await extractPdf(request.body)
+        : [{ pageNumber: 1, text: await extractPhoto(request.body) }];
+    } catch (error) {
+      failure = error instanceof RequestError ? error : new RequestError(500, 'Could not extract text from this file. Try again.');
+      activity.uploads[kind] = { name, status: 'failed', error: failure.message };
+    }
+    if (!failure) {
+      chat.attachments[kind] = { name, kind, pages };
+      resetAttachmentContext(chat);
+      chatStore.saveAttachment(ownerId, chat, kind);
+    }
   } finally {
-    chat.busy = null;
+    if (activity.uploads[kind]?.status === 'processing') activity.uploads[kind] = null;
+    finishActivity(ownerId, chatId, activity);
   }
-  if (failure) return response.status(failure.status).json({ error: failure.message, chat });
-  response.json(chat);
+  const view = chatResponse(ownerId, chat);
+  if (failure) return response.status(failure.status).json({ error: failure.message, chat: view });
+  response.json(view);
 });
 
 router.delete('/:chatId/document/:kind', (request, response) => {
-  const { chat } = response.locals;
-  const { kind } = request.params;
-  requireIdle(chat);
+  const { id: ownerId } = response.locals.user;
+  const { chatId, kind } = request.params;
+  requireIdle(ownerId, chatId);
   if (kind !== 'pdf' && kind !== 'photo') throw new RequestError(400, 'Choose the PDF or photo to remove.');
 
-  const hadAttachment = Boolean(chat.attachments[kind]);
-  chat.attachments[kind] = null;
-  chat.uploads[kind] = null;
-  if (hadAttachment) resetAttachmentContext(chat);
-  response.json(chat);
+  const chat = chatStore.readChat(ownerId, chatId);
+  if (chat.attachments[kind]) {
+    chat.attachments[kind] = null;
+    resetAttachmentContext(chat);
+    chatStore.saveAttachment(ownerId, chat, kind);
+  }
+  const activity = activityByChat.get(activityKey(ownerId, chatId));
+  if (activity) {
+    activity.uploads[kind] = null;
+    finishActivity(ownerId, chatId, activity);
+  }
+  response.json(chatResponse(ownerId, chat));
 });
 
 router.patch('/:chatId/document', readJson, (request, response) => {
-  const { chat } = response.locals;
-  requireIdle(chat);
+  const { id: ownerId } = response.locals.user;
+  const { chatId } = request.params;
+  requireIdle(ownerId, chatId);
+  const chat = chatStore.readChat(ownerId, chatId);
   if (!chat.attachments.photo) {
     throw new RequestError(400, 'Attach a photo before editing extracted text.');
   }
@@ -141,37 +172,41 @@ router.patch('/:chatId/document', readJson, (request, response) => {
   if (page.text !== text.trim()) {
     page.text = text.trim();
     resetAttachmentContext(chat);
+    chatStore.saveAttachment(ownerId, chat, 'photo');
   }
-  response.json(chat);
+  response.json(chatResponse(ownerId, chat));
 });
 
 router.post('/:chatId/messages', readJson, async (request, response) => {
-  const { chat } = response.locals;
-  requireIdle(chat);
+  const { id: ownerId } = response.locals.user;
+  const { chatId } = request.params;
+  requireIdle(ownerId, chatId);
+  const chat = chatStore.readChat(ownerId, chatId);
   const question = getQuestion(request.body?.question);
   const mode = request.body.mode ?? 'document';
   if (mode !== 'document' && mode !== 'legal') throw new RequestError(400, 'Choose Attachments or Legal search.');
 
-  chat.busy = 'answering';
+  const activity = beginActivity(ownerId, chatId, 'answering');
   try {
-    const { id: userId } = response.locals.user;
     const history = chat.messages.filter(message => (message.mode ?? 'document') === mode);
     const attachments = Object.values(chat.attachments).filter(Boolean);
     const answer = mode === 'legal'
-      ? await answerLegalQuestion(userId, question, history)
-      : await answerChatQuestion(userId, question, attachments, history);
+      ? await answerLegalQuestion(ownerId, question, history)
+      : await answerChatQuestion(ownerId, question, attachments, history);
     if (!chat.messages.length) {
       chat.title = question.length > 55 ? question.slice(0, 54).trimEnd() + '…' : question;
     }
-    chat.messages.push(
+    const messages = [
       { id: randomUUID(), role: 'user', mode, content: question },
       { id: randomUUID(), role: 'assistant', mode, ...answer },
-    );
+    ];
     chat.updatedAt = Date.now();
+    chatStore.appendMessages(ownerId, chat, messages);
+    chat.messages.push(...messages);
   } finally {
-    chat.busy = null;
+    finishActivity(ownerId, chatId, activity);
   }
-  response.json(chat);
+  response.json(chatResponse(ownerId, chat));
 });
 
 router.use((error, request, response, next) => {

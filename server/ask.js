@@ -66,7 +66,7 @@ async function requestAnswer(userId, question, sources, history, citationInstruc
     ...recentMessages,
     { role: 'user', content: JSON.stringify({ question, sources }) },
   ];
-  const { maxOutputTokens, reconcileUsage } = reserveAsk(userId, messages);
+  const { maxOutputTokens, reconcileUsage } = await reserveAsk(userId, messages);
   const signal = AbortSignal.timeout(45000);
 
   async function send(reasoningOptions) {
@@ -101,7 +101,7 @@ async function requestAnswer(userId, question, sources, history, citationInstruc
         /reasoning is mandatory.*cannot be disabled/i.test(result?.error?.message ?? '')) {
       ({ upstream, result } = await send());
     }
-    reconcileUsage(result?.usage);
+    await reconcileUsage(result?.usage);
 
     if (!upstream.ok) {
       if (upstream.status === 401 || upstream.status === 403) {
@@ -164,10 +164,10 @@ async function answerChatQuestion(userId, question, attachments, history) {
 }
 
 async function answerLegalQuestion(userId, question, history) {
-  checkAskAllowance(userId);
+  await checkAskAllowance(userId);
   const hits = await searchLegal(question);
   if (!hits.length) {
-    recordAskWithoutModel(userId);
+    await recordAskWithoutModel(userId);
     return { content: noLegalAnswer, citations: [] };
   }
 

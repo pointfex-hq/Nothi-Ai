@@ -277,7 +277,7 @@ function ChatWorkspace({ user, onSignOut }) {
           </nav>
           <div className="sidebar-note">
             <p className="sidebar-account"><UserRound size={16} aria-hidden="true" /><span>{user.username}</span></p>
-            <p>Chats are kept until the server restarts.</p>
+            <p>Your chats are saved on this server.</p>
           </div>
         </aside>
 

@@ -33,6 +33,6 @@ node .\server\scripts\legal.js search "Your known question" "Expected section" "
 
 Use `collections` to confirm the backend can access your cluster. Search prints the returned passages and metadata. It considers up to 20 candidates and returns up to five excerpts, giving other provisions a chance to appear when one section has many matching chunks. The optional expected section and law title make it exit with an error if the provision is absent from the results. For a bilingual corpus, repeat the search with known Bangla and English questions.
 
-Restart Express after changing `.env` and select **Legal search** next to **Attach** in a signed-in chat. The app sends the question to Qdrant Cloud, then gives the retrieved passages and recent legal turns to OpenRouter. Legal search and attachment Ask share the signed-in account’s question and token limits. The app reserves the full model input and configured output allowance before calling OpenRouter. Usage counters reset when Express restarts.
+Restart Express after changing `.env` and select **Legal search** next to **Attach** in a signed-in chat. The app sends the question to Qdrant Cloud, then gives the retrieved passages and recent legal turns to OpenRouter. Legal search and attachment Ask share the signed-in account’s question and token limits. Redis reserves the full model input and configured output allowance before calling OpenRouter. The counters survive Express restarts.
 
 If OpenRouter cannot return a complete cited summary, Legal search shows the retrieved excerpts with their official links.

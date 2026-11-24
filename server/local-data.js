@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const accountsFile = process.env.NOTHI_ACCOUNTS_FILE || path.join(__dirname, 'data', 'accounts.json');
 const usageLimitsFile = path.join(path.dirname(accountsFile), 'usage-limits.json');
+const chatsFile = path.join(path.dirname(accountsFile), 'chats.sqlite');
 
 function readLocalJson(file, fallback) {
   try {
@@ -25,4 +26,4 @@ function writeLocalJson(file, value) {
   }
 }
 
-module.exports = { accountsFile, usageLimitsFile, readLocalJson, writeLocalJson };
+module.exports = { accountsFile, usageLimitsFile, chatsFile, readLocalJson, writeLocalJson };

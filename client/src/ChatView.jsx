@@ -59,7 +59,7 @@ function ChatMessage({ message, openReview }) {
 export default function ChatView({ id, onUpdate }) {
   const [chat, setChat] = useState(null)
   const [draft, setDraft] = useState('')
-  const [mode, setMode] = useState('document')
+  const [selectedMode, setSelectedMode] = useState(null)
   const [pending, setPending] = useState(null)
   const [error, setError] = useState('')
   const [uploadIssues, setUploadIssues] = useState({})
@@ -74,6 +74,7 @@ export default function ChatView({ id, onUpdate }) {
   const remoteBusy = Boolean(chat?.busy && !pending)
   const attachments = chat?.attachments ?? {}
   const hasAttachments = Boolean(attachments.pdf || attachments.photo)
+  const mode = selectedMode ?? chat?.messages.at(-1)?.mode ?? 'document'
   const isLegal = mode === 'legal'
   const canSend = Boolean(chat && (isLegal || hasAttachments) && draft.trim() && !busy)
   const uploads = {
@@ -336,7 +337,7 @@ export default function ChatView({ id, onUpdate }) {
               <button className="subtle-button attach-button" type="button" onClick={() => fileInput.current.click()} disabled={!chat || Boolean(busy)}>
                 <Paperclip size={18} aria-hidden="true" /> Attach
               </button>
-              <select className="ask-mode" aria-label="Ask mode" value={mode} onChange={event => setMode(event.target.value)} disabled={Boolean(busy)}>
+              <select className="ask-mode" aria-label="Ask mode" value={mode} onChange={event => setSelectedMode(event.target.value)} disabled={Boolean(busy)}>
                 <option value="document">Attachments</option>
                 <option value="legal">Legal search</option>
               </select>
