@@ -6,6 +6,9 @@ export interface ChatCitation {
   id: string;
   act: string;
   section?: string;
+  label?: string;
+  officialUrl?: string;
+  kind?: string;
 }
 
 export interface ChatAttachment {
@@ -14,11 +17,14 @@ export interface ChatAttachment {
   type: 'image' | 'pdf';
   size: number;
   dataUrl?: string;
+  extractedText?: string;
+  file?: File;
 }
 
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
+  mode?: 'document' | 'legal' | 'statutory';
   content: string;
   citations?: ChatCitation[];
   attachments?: ChatAttachment[];

@@ -29,6 +29,8 @@ import { hasMarkdownStructure, generateFilenameFromHeading } from '@/lib/markdow
 import { serverApi, ServerChatMessage } from '@/lib/api';
 import type { CorpusSection } from '@/types';
 
+export type AskMode = 'legal' | 'document' | 'statutory';
+
 interface ChatSession {
   id: string;
   title: string;
@@ -173,6 +175,29 @@ export default function ChatPage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string>('');
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
+  const [askMode, setAskMode] = useState<AskMode>('legal');
+  const [quota, setQuota] = useState<{
+    questionsUsed: number;
+    questionsLimit: number;
+    tokensUsed: number;
+    tokensLimit: number;
+    questionsPerMinute: number;
+    resetAt: string;
+  } | null>(null);
+  const [inspectingAttachment, setInspectingAttachment] = useState<{
+    name: string;
+    text: string;
+  } | null>(null);
+
+  const refreshQuota = useCallback(async () => {
+    if (!user) return;
+    try {
+      const q = await serverApi.chats.getQuota();
+      setQuota(q);
+    } catch (err) {
+      console.warn('Could not refresh quota:', err);
+    }
+  }, [user]);
 
   useEffect(() => {
     let active = true;
@@ -192,7 +217,13 @@ export default function ChatPage() {
 
       // 1. Fetch live sessions from backend server
       try {
-        const serverList = await serverApi.chats.list();
+        const [serverList, quotaData] = await Promise.all([
+          serverApi.chats.list(),
+          serverApi.chats.getQuota().catch(() => null),
+        ]);
+        if (active && quotaData) {
+          setQuota(quotaData);
+        }
         if (!active) return;
 
         if (Array.isArray(serverList) && serverList.length > 0) {
@@ -212,6 +243,13 @@ export default function ChatPage() {
             console.warn('Could not fetch active chat details:', e);
           }
 
+          if (activeFullChat && Array.isArray(activeFullChat.messages) && activeFullChat.messages.length > 0) {
+            const lastMode = activeFullChat.messages[activeFullChat.messages.length - 1]?.mode;
+            if (lastMode === 'legal' || lastMode === 'document') {
+              setAskMode(lastMode);
+            }
+          }
+
           const mappedSessions: ChatSession[] = serverList.map((item) => {
             if (item.id === chosenActiveId && activeFullChat) {
               return {
@@ -221,8 +259,17 @@ export default function ChatPage() {
                 messages: (activeFullChat.messages || []).map((m: ServerChatMessage) => ({
                   id: m.id,
                   role: m.role,
+                  mode: m.mode,
                   content: m.content,
-                  citations: m.citations as ChatCitation[] | undefined,
+                  citations: Array.isArray(m.citations)
+                    ? m.citations.map((c: { id?: string | number; section?: string; lawTitle?: string; label?: string; officialUrl?: string }) => ({
+                        id: String(c.id || c.section || 'statute'),
+                        act: c.lawTitle || c.label || 'The Transfer of Property Act, 1882',
+                        section: c.section ? (String(c.section).startsWith('s.') ? String(c.section) : `s. ${c.section}`) : (c.label || ''),
+                        officialUrl: c.officialUrl,
+                        label: c.label,
+                      }))
+                    : (m.citations as ChatCitation[] | undefined),
                   attachments: m.attachments as ChatAttachment[] | undefined,
                   timestamp: m.timestamp || Date.now(),
                 })),
@@ -440,11 +487,24 @@ export default function ChatPage() {
       try {
         const fullChat = await serverApi.chats.get(id);
         if (fullChat && Array.isArray(fullChat.messages) && fullChat.messages.length > 0) {
+          const lastMode = fullChat.messages[fullChat.messages.length - 1]?.mode;
+          if (lastMode === 'legal' || lastMode === 'document') {
+            setAskMode(lastMode);
+          }
           const mappedMsgs: ChatMessage[] = fullChat.messages.map((m: ServerChatMessage) => ({
             id: m.id,
             role: m.role,
+            mode: m.mode,
             content: m.content,
-            citations: m.citations as ChatCitation[] | undefined,
+            citations: Array.isArray(m.citations)
+              ? m.citations.map((c: { id?: string | number; section?: string; lawTitle?: string; label?: string; officialUrl?: string }) => ({
+                  id: String(c.id || c.section || 'statute'),
+                  act: c.lawTitle || c.label || 'The Transfer of Property Act, 1882',
+                  section: c.section ? (String(c.section).startsWith('s.') ? String(c.section) : `s. ${c.section}`) : (c.label || ''),
+                  officialUrl: c.officialUrl,
+                  label: c.label,
+                }))
+              : (m.citations as ChatCitation[] | undefined),
             attachments: m.attachments as ChatAttachment[] | undefined,
             timestamp: m.timestamp || Date.now(),
           }));
@@ -639,6 +699,7 @@ export default function ChatPage() {
           name: file.name,
           type: isImg ? 'image' : 'pdf',
           size: file.size,
+          file,
           uploadProgress: 45,
         },
       ]);
@@ -651,6 +712,7 @@ export default function ChatPage() {
               ? {
                 ...a,
                 uploadProgress: 100,
+                file,
                 dataUrl: isImg ? dataUrl : undefined,
               }
               : a
@@ -751,6 +813,15 @@ export default function ChatPage() {
     if (!content && attachments.length === 0) return;
     if (isStreaming || isThinking) return;
 
+    if (askMode === 'document' && attachments.length === 0) {
+      setAttachmentError(
+        lang === 'bn'
+          ? 'নথি প্রশ্নোত্তর মোডে অন্তত একটি দলিল বা খতিয়ান সংযুক্ত করুন (অথবা আইনি সার্চ মোড ব্যবহার করুন)।'
+          : 'Please attach a deed, khatian, or NID scan for Document Q&A, or switch to Legal Search.'
+      );
+      return;
+    }
+
     abortControllerRef.current = false;
     const currentAttachments = [...attachments];
     setInputText('');
@@ -762,6 +833,7 @@ export default function ChatPage() {
     const userMessage: ChatMessage = {
       id: makeId('msg_user'),
       role: 'user',
+      mode: askMode,
       content: content || (currentAttachments.length > 0 ? `Uploaded ${currentAttachments.length} document file(s) for examination.` : ''),
       attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
       timestamp: currentNow,
@@ -807,6 +879,25 @@ export default function ChatPage() {
         ];
     persistSessions(updatedSessionsWithUser);
 
+    // Upload any attached files to backend if user is authenticated
+    if (user && targetSessionId && currentAttachments.length > 0) {
+      for (const att of currentAttachments) {
+        if (att.file) {
+          try {
+            const mime = att.file.type || (att.type === 'image' ? 'image/jpeg' : 'application/pdf');
+            const uploaded = await serverApi.chats.uploadDocument(targetSessionId, att.file, att.name, mime);
+            const kind = att.type === 'image' ? 'photo' : 'pdf';
+            const serverPages = uploaded.attachments?.[kind]?.pages;
+            if (serverPages && Array.isArray(serverPages)) {
+              att.extractedText = serverPages.map((p) => p.text).join('\n\n');
+            }
+          } catch (uploadErr) {
+            console.warn('Backend document upload notice:', uploadErr);
+          }
+        }
+      }
+    }
+
     // ── STAGE 1: 4-STAGE THINKING SEQUENCE (Snappy, responsive ~360ms total) ──
     setIsThinking(true);
     setLogoState('thinking');
@@ -828,80 +919,121 @@ export default function ChatPage() {
     await new Promise((r) => setTimeout(r, 80));
     if (abortControllerRef.current) return;
 
-    // ── STAGE 2: STREAMING WORD-BY-WORD (Fast, fluid wps) ─────────────
-    setIsThinking(false);
-    setIsStreaming(true);
-    setStreamingText('');
-
+    // ── STAGE 2: EXECUTION & STREAMING ───────────────────────────────
     let accumulatedText = '';
     let responseCitations: ChatCitation[] = [];
 
-    try {
-      const response = await sendChatMessage(
-        updatedMessagesWithUser,
-        lang,
-        (chunk) => {
-          if (abortControllerRef.current) return;
-          accumulatedText += chunk;
-          setStreamingText(accumulatedText);
-        }
-      );
+    if (user && (askMode === 'legal' || askMode === 'document') && targetSessionId) {
+      try {
+        const updatedChat = await serverApi.chats.sendMessage(targetSessionId, content, askMode);
+        const serverMessages = updatedChat.messages || [];
+        const lastMsg = serverMessages[serverMessages.length - 1];
 
-      responseCitations = response.citations;
+        accumulatedText = lastMsg?.content || 'I could not find an answer in the legal sources.';
+        responseCitations = (lastMsg?.citations || []).map((c: { id?: string | number; section?: string; lawTitle?: string; label?: string; officialUrl?: string }) => ({
+          id: String(c.id || c.section || 'statute'),
+          act: c.lawTitle || c.label || 'The Transfer of Property Act, 1882',
+          section: c.section ? (String(c.section).startsWith('s.') ? String(c.section) : `s. ${c.section}`) : (c.label || ''),
+          officialUrl: c.officialUrl,
+          label: c.label,
+        }));
 
-      // Check if out-of-corpus error
-      if (response.citations.length === 0 && response.content.includes('cannot find this specific')) {
-        setLogoState('error');
-        await new Promise((r) => setTimeout(r, 300));
-      } else {
-        setLogoState('answered');
-        await new Promise((r) => setTimeout(r, 300));
-      }
-    } catch (err) {
-      console.error('Error in sendChatMessage:', err);
-      setIsErrorState(true);
-      setLogoState('error');
-    } finally {
-      setIsStreaming(false);
-
-      if (!abortControllerRef.current) {
-        const assistantMessage: ChatMessage = {
-          id: makeId('msg_asst'),
-          role: 'assistant',
-          content: accumulatedText,
-          citations: responseCitations,
-          timestamp: nowTimestamp(),
-        };
-
-        const finalizedMessages = [...updatedMessagesWithUser, assistantMessage];
-        const updatedFinalSessions = sessions.some((s) => s.id === targetSessionId)
-          ? sessions.map((s) =>
-              s.id === targetSessionId ? { ...s, title: newTitle, messages: finalizedMessages } : s
-            )
-          : [
-              {
-                id: targetSessionId,
-                title: newTitle,
-                createdAt: currentNow,
-                messages: finalizedMessages,
-              },
-              ...sessions,
-            ];
-
-        persistSessions(updatedFinalSessions);
+        setIsThinking(false);
+        setIsStreaming(true);
         setStreamingText('');
-        setLogoState('idle');
 
-        // Sync finalized conversation to backend server
-        if (user && targetSessionId) {
-          serverApi.chats
-            .update(targetSessionId, {
-              title: newTitle,
-              messages: finalizedMessages as unknown as ServerChatMessage[],
-              updatedAt: Date.now(),
-            })
-            .catch((err) => console.warn('Could not sync chat messages to server:', err));
+        const words = accumulatedText.split(' ');
+        let currentStreaming = '';
+        for (let i = 0; i < words.length; i++) {
+          if (abortControllerRef.current) break;
+          currentStreaming += (i === 0 ? '' : ' ') + words[i];
+          setStreamingText(currentStreaming);
+          if (i % 2 === 0) await new Promise((r) => setTimeout(r, 12));
         }
+
+        setLogoState('answered');
+        refreshQuota();
+      } catch (err: unknown) {
+        console.error('Error in serverApi.chats.sendMessage:', err);
+        setIsErrorState(true);
+        setLogoState('error');
+        setAttachmentError(err instanceof Error ? err.message : 'The chat request could not be completed. Try again.');
+      } finally {
+        setIsStreaming(false);
+      }
+    } else {
+      setIsThinking(false);
+      setIsStreaming(true);
+      setStreamingText('');
+
+      try {
+        const response = await sendChatMessage(
+          updatedMessagesWithUser,
+          lang,
+          (chunk) => {
+            if (abortControllerRef.current) return;
+            accumulatedText += chunk;
+            setStreamingText(accumulatedText);
+          }
+        );
+
+        responseCitations = response.citations;
+
+        if (response.citations.length === 0 && response.content.includes('cannot find this specific')) {
+          setLogoState('error');
+          await new Promise((r) => setTimeout(r, 300));
+        } else {
+          setLogoState('answered');
+          await new Promise((r) => setTimeout(r, 300));
+        }
+      } catch (err: unknown) {
+        console.error('Error in sendChatMessage:', err);
+        setIsErrorState(true);
+        setLogoState('error');
+        setAttachmentError(err instanceof Error ? err.message : 'The request could not be completed.');
+      } finally {
+        setIsStreaming(false);
+      }
+    }
+
+    if (!abortControllerRef.current && accumulatedText) {
+      const assistantMessage: ChatMessage = {
+        id: makeId('msg_asst'),
+        role: 'assistant',
+        mode: askMode,
+        content: accumulatedText,
+        citations: responseCitations,
+        timestamp: nowTimestamp(),
+      };
+
+      const finalizedMessages = [...updatedMessagesWithUser, assistantMessage];
+      const updatedFinalSessions = sessions.some((s) => s.id === targetSessionId)
+        ? sessions.map((s) =>
+            s.id === targetSessionId ? { ...s, title: newTitle, messages: finalizedMessages } : s
+          )
+        : [
+            {
+              id: targetSessionId,
+              title: newTitle,
+              createdAt: currentNow,
+              messages: finalizedMessages,
+            },
+            ...sessions,
+          ];
+
+      persistSessions(updatedFinalSessions);
+      setStreamingText('');
+      setLogoState('idle');
+
+      // Sync finalized conversation to backend server if in statutory mode
+      if (user && targetSessionId && askMode === 'statutory') {
+        serverApi.chats
+          .update(targetSessionId, {
+            title: newTitle,
+            messages: finalizedMessages as unknown as ServerChatMessage[],
+            updatedAt: currentNow,
+          })
+          .catch((err) => console.warn('Could not sync chat messages to server:', err));
       }
     }
   };
@@ -1053,8 +1185,19 @@ export default function ChatPage() {
           </button>
         </div>
 
-        {/* Right Controls: Single EN / বাং Switch, Sign In/Profile, Back to site */}
+        {/* Right Controls: Live Quota, Single EN / বাং Switch, Sign In/Profile, Back to site */}
         <div className="flex items-center gap-2.5 sm:gap-3.5">
+          {/* Live Redis Daily Quota Badge */}
+          {mounted && user && quota && (
+            <div
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper-dark/60 text-xs font-mono text-ink shadow-2xs"
+              title={`Questions: ${quota.questionsUsed}/${quota.questionsLimit} used • Tokens: ${quota.tokensUsed.toLocaleString()}/${quota.tokensLimit.toLocaleString()} • Resets at ${new Date(quota.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+              <span>{Math.max(0, quota.questionsLimit - quota.questionsUsed)} Qs left</span>
+            </div>
+          )}
+
           {/* Quiet link for smaller screens */}
           <button
             type="button"
@@ -1372,8 +1515,17 @@ export default function ChatPage() {
                                   )}
                                   <div className="truncate">
                                     <div className="font-medium truncate">{att.name}</div>
-                                    <div className="text-[10px] font-mono opacity-70">
-                                      {(att.size / 1024).toFixed(1)} KB
+                                    <div className="text-[10px] font-mono opacity-70 flex items-center gap-1.5">
+                                      <span>{(att.size / 1024).toFixed(1)} KB</span>
+                                      {att.extractedText && (
+                                        <button
+                                          type="button"
+                                          onClick={() => setInspectingAttachment({ name: att.name, text: att.extractedText! })}
+                                          className="underline hover:text-brass cursor-pointer"
+                                        >
+                                          • Review Text
+                                        </button>
+                                      )}
                                     </div>
                                   </div>
                                 </div>
@@ -1579,6 +1731,67 @@ export default function ChatPage() {
             {/* ── 3. DOCKED BOTTOM INPUT BAR (FLOATING ROUNDED CONTAINER 20PX, LAYERED SHADOW) ── */}
             <div className="pt-4 sticky bottom-0 bg-[#F6F1E7]/95 backdrop-blur-md pb-4 z-10">
               <div className="rounded-[20px] bg-paper border border-border shadow-[0_4px_20px_-2px_rgba(27,67,50,0.06),0_2px_6px_-1px_rgba(0,0,0,0.04)] focus-within:border-brass/80 focus-within:ring-2 focus-within:ring-brass/25 transition-all duration-200 p-3 space-y-2">
+                {/* Ask Mode Switcher: Legal Search (Qdrant) vs Document Q&A vs Statutory Vetting */}
+                <div className="flex items-center justify-between pb-1.5 border-b border-border/50">
+                  <div
+                    role="radiogroup"
+                    aria-label="Select ask mode"
+                    className="inline-flex p-0.5 rounded-full border border-border/80 bg-paper-dark/60 text-xs"
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={askMode === 'legal'}
+                      onClick={() => setAskMode('legal')}
+                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                        askMode === 'legal'
+                          ? 'bg-green-deep text-paper font-semibold shadow-2xs'
+                          : 'text-ink-muted hover:text-ink'
+                      }`}
+                      title="Qdrant Cloud vector search with lawyer-style reasoning on Section 17A and Bangladesh property laws"
+                    >
+                      <span className="text-[11px]">⚖️</span>
+                      <span>{lang === 'bn' ? 'আইনি সার্চ' : 'Legal Search'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={askMode === 'document'}
+                      onClick={() => setAskMode('document')}
+                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                        askMode === 'document'
+                          ? 'bg-green-deep text-paper font-semibold shadow-2xs'
+                          : 'text-ink-muted hover:text-ink'
+                      }`}
+                      title="Direct question answering grounded strictly in your attached files (PDF or photo)"
+                    >
+                      <span className="text-[11px]">📄</span>
+                      <span>{lang === 'bn' ? 'নথি প্রশ্নোত্তর' : 'Document Q&A'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={askMode === 'statutory'}
+                      onClick={() => setAskMode('statutory')}
+                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                        askMode === 'statutory'
+                          ? 'bg-green-deep text-paper font-semibold shadow-2xs'
+                          : 'text-ink-muted hover:text-ink'
+                      }`}
+                      title="Deterministic verification against 28 codified sections of Bangladesh laws"
+                    >
+                      <span className="text-[11px]">🏛️</span>
+                      <span>{lang === 'bn' ? 'বিধি নিরীক্ষা' : 'Statutory Vetting'}</span>
+                    </button>
+                  </div>
+
+                  <div className="hidden md:flex items-center gap-1.5 text-[11px] font-mono text-ink-muted">
+                    {askMode === 'legal' && <span className="text-emerald-700">Qdrant Cloud • Lawyer Reasoning</span>}
+                    {askMode === 'document' && <span className="text-brass">Extracted Documents Context</span>}
+                    {askMode === 'statutory' && <span>28 Codified Sections</span>}
+                  </div>
+                </div>
+
                 {/* Upload Error Banner */}
                 {attachmentError && (
                   <div className="px-3 py-1.5 rounded-xs bg-vermillion/10 border border-vermillion/30 text-vermillion text-xs font-sans flex items-center justify-between">
@@ -1755,9 +1968,38 @@ export default function ChatPage() {
                 </div>
               </div>
 
-              {/* Fixed Quiet 13px Legal Note */}
-              <p className="text-center text-[13px] font-sans text-ink-muted pt-2.5">
-                Nothi AI explains verified statutory sections. It does not replace a licensed advocate.
+              {/* Contextual Mode Guidance Note */}
+              <p className="text-center text-[12px] font-sans text-ink-muted pt-2.5 leading-normal">
+                {askMode === 'legal' ? (
+                  <>
+                    <span className="text-green-deep font-semibold">Legal Search:</span>{' '}
+                    {lang === 'bn'
+                      ? 'আপনার প্রশ্নটি Qdrant Cloud (nothi-legal-official) এবং ওপেনরাউটারে অ্যাডভোকেট যুক্তিযুক্তকরণে পাঠানো হয়।'
+                      : 'Queries Qdrant Cloud (nothi-legal-official) and retrieves lawyer-grounded statutory analysis via OpenRouter.'}
+                    {attachments.length > 0 && (
+                      <span className="text-brass font-medium">
+                        {' '}{lang === 'bn' ? 'সংযুক্ত নথির তথ্যও কেস ফ্যাক্ট হিসেবে অন্তর্ভুক্ত হবে।' : 'Extracted attachment text is also analyzed as case facts.'}
+                      </span>
+                    )}
+                  </>
+                ) : askMode === 'document' ? (
+                  <>
+                    <span className="text-green-deep font-semibold">Document Q&A:</span>{' '}
+                    {lang === 'bn'
+                      ? 'উত্তর সরাসরি আপনার সংযুক্ত সাফ কবলা, খতিয়ান বা এনআইডি থেকে দেওয়া হবে।'
+                      : 'Answers are grounded strictly in your attached deed, khatian, or NID scans.'}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-green-deep font-semibold">Statutory Vetting:</span>{' '}
+                    {lang === 'bn'
+                      ? '২৮টি সংবিধিবদ্ধ ধারা দ্বারা নিয়ন্ত্রিত।'
+                      : 'Deterministic verification against 28 codified sections of Bangladeshi property law.'}
+                  </>
+                )}
+                <span className="block text-[11px] opacity-75 mt-0.5">
+                  Nothi AI explains verified statutory sections. It does not replace a licensed advocate.
+                </span>
               </p>
             </div>
           </div>
@@ -1812,6 +2054,65 @@ export default function ChatPage() {
         isOpen={signInModalOpen}
         onClose={() => setSignInModalOpen(false)}
       />
+
+      {/* ── 8. ATTACHMENT EXTRACTED TEXT REVIEW MODAL ── */}
+      {inspectingAttachment && (
+        <div
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-text"
+          onClick={() => setInspectingAttachment(null)}
+        >
+          <div
+            className="bg-paper border border-brass/60 rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl p-6 space-y-4 text-ink"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div>
+                <h3 className="font-heading font-bold text-green-deep text-lg">
+                  {inspectingAttachment.name}
+                </h3>
+                <p className="text-xs text-ink-muted font-mono mt-0.5">
+                  Extracted Document Text • {inspectingAttachment.text.length} chars • ~{Math.ceil(inspectingAttachment.text.split(/\s+/).length)} words
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setInspectingAttachment(null)}
+                className="p-1 text-ink-muted hover:text-ink font-bold text-sm cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-3.5 bg-paper-light rounded-lg border border-border/70 font-mono text-xs whitespace-pre-wrap leading-relaxed text-ink select-text">
+              {inspectingAttachment.text}
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <span className="text-xs text-ink-muted">
+                Extracted via Node.js PDF.js / Tesseract OCR
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(inspectingAttachment.text);
+                  }}
+                  className="px-3 py-1.5 rounded-full border border-border bg-paper hover:bg-paper-dark text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Copy Text
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInspectingAttachment(null)}
+                  className="px-4 py-1.5 rounded-full bg-green-deep hover:bg-green-mid text-paper text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

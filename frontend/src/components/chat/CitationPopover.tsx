@@ -48,14 +48,21 @@ export function CitationPopover({ citation, onInspect, index = 0 }: CitationPopo
       <button
         type="button"
         onClick={() => {
-          if (section) onInspect(section);
+          if (section) {
+            onInspect(section);
+          } else if (citation.officialUrl) {
+            window.open(citation.officialUrl, '_blank', 'noopener,noreferrer');
+          }
         }}
         className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/90 bg-paper-light hover:border-brass/80 hover:bg-paper text-ink text-xs transition-all duration-150 ease-out cursor-pointer shadow-2xs hover:shadow-xs hover:-translate-y-0.5 active:scale-95 group focus-visible:ring-2 focus-visible:ring-brass focus-visible:outline-hidden"
-        title="View verbatim statutory text"
+        title={citation.officialUrl ? `View official text (${citation.officialUrl})` : "View verbatim statutory text"}
       >
         <span className="text-[11px] text-green-deep font-bold font-mono">§</span>
-        <span className="font-mono font-semibold text-green-deep text-[11px]">{citation.section || citation.id}</span>
+        <span className="font-mono font-semibold text-green-deep text-[11px]">{citation.section || citation.label || citation.id}</span>
         <span className="text-ink-muted text-[11px] font-sans opacity-80 truncate max-w-[160px]">({citation.act})</span>
+        {citation.officialUrl && !section && (
+          <span className="text-[10px] text-brass opacity-70 group-hover:opacity-100">↗</span>
+        )}
       </button>
 
       {/* Floating Popover on Hover */}
@@ -84,7 +91,7 @@ export function CitationPopover({ citation, onInspect, index = 0 }: CitationPopo
             </p>
 
             <div className="pt-1 flex items-center justify-between text-[11px] text-brass font-mono">
-              <span>Click chip to view full section</span>
+              <span>{citation.officialUrl && !section ? 'Open bdlaws legislation portal ↗' : 'Click chip to view full section'}</span>
               <span>&rarr;</span>
             </div>
           </div>

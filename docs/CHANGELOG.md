@@ -15,6 +15,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [1.1.0] - 2026-11-25
 
 ### Added
+- **Ask Mode Multi-Engine Selector (`frontend/src/app/chat/page.tsx`)**:
+  - Added segmented controls in the composer toolbar supporting `Legal Search` (Qdrant Cloud + OpenRouter lawyer reasoning + Section 17A), `Document Q&A` (attached Deed/Khatian files), and `Statutory Vetting` (28 codified sections rule engine).
+  - Wired live backend message dispatch (`POST /api/chats/:chatId/messages`) when authenticated, with smooth client-side word-by-word streaming animation.
+- **Live Upstash Redis Quota Monitor**:
+  - Added live quota monitor pill in `/chat` header showing queries remaining today with hover tooltip detailing token budget and daily reset time.
+- **Extracted Document Text & OCR Review Modal**:
+  - Added background file upload to `/api/chats/:id/document` for PDF.js text and Tesseract OCR extraction.
+  - Added "Review Text" modal for inspecting extracted document text with word/character counts and one-click copy.
+- **Official BDLaws External Citation Linking (`CitationPopover.tsx`)**:
+  - Updated citation chips to resolve official legislation links (`bdlaws.minlaw.gov.bd`) dynamically for retrieved statutory sections.
 - **Native SQLite Chat Storage Engine (`backend/chat-store.js`)**:
   - Integrated Node.js 22 native `node:sqlite` database (`chats.sqlite`) with ACID transactions, foreign keys, cascading deletes, and revision conflict detection.
   - Implemented `updateFullChat` supporting live synchronization of chat message streams, titles, attachments, and timestamps.
