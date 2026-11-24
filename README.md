@@ -96,14 +96,18 @@ Nothi-Ai/
 │   ├── admin.js                      # Admin usage limit settings & quota management
 │   ├── audit.js                      # Deterministic land document auditing engine
 │   ├── chat-statutory.js             # Grounded statutory chat evaluation engine
+│   ├── chat-store.js                 # Native SQLite chat store (transactions, cascades, revision)
 │   ├── chats.js                      # Multi-turn chat persistence & document extraction
-│   ├── ask.js                        # LLM question answering with vector retrieval
-│   ├── ask-quota.js                  # Token quota tracking & rate limiting
-│   ├── legal-retrieval.js            # Qdrant Cloud semantic vector search
+│   ├── ask.js                        # LLM question answering with lawyer-style reasoning
+│   ├── ask-quota.js                  # Redis Lua quota tracking & in-memory fallback
+│   ├── quota-redis.js                # Upstash Redis client with connection pooling & eval
+│   ├── legal-retrieval.js            # Qdrant Cloud vector search & Section 17A clause grouping
 │   ├── ocr.js                        # Bengali/English OCR via Tesseract and Sharp
 │   ├── pdf.js                        # PDF page extraction via PDF.js
-│   ├── local-data.js                 # JSON file store helper
+│   ├── local-data.js                 # User accounts & audit logs JSON store helper
 │   ├── usage-limit-settings.js       # Admin usage settings management
+│   ├── scripts/                      # Legal corpus ingestion CLI (legal.js)
+│   ├── evals/                        # Legal search evaluation suite (legal-search.json)
 │   ├── package.json                  # Backend dependencies and scripts
 │   └── .env.example                  # Backend environment variables template
 │

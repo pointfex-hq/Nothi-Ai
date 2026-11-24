@@ -124,17 +124,24 @@ To ensure strict compliance with institutional legal standards and eliminate una
 
 ---
 
-## 8. Chat Persistence Across Restarts & SSR Hydration Stabilization
+## 8. Chat Persistence, SQLite Engine & Upstash Redis Integration
 
 1. **Permanent, Deterministic User IDs**:
    - Seeded environment accounts (`ADMIN_EMAIL`, `USER_EMAIL`) utilize immutable IDs (`env-admin`, `env-user`) rather than transient random UUIDs generated on server boot.
    - User registrations preserve their permanent IDs across backend cold restarts and container redeployments.
-2. **Disk-Backed Atomic Chat Persistence**:
-   - `backend/chats.js` flushes sessions, messages, and attachments to `backend/data/chats.json` with atomic rename writes (`writeLocalJson`), restoring user conversations seamlessly upon re-authentication.
-   - Enhanced `PUT /api/chats/:chatId` enables client-side streaming synchronization of titles and message arrays.
-3. **Watcher Isolation**:
-   - Added explicit `--watch-path` file targets in `backend/package.json` to prevent process reload loops on runtime JSON database updates.
-4. **Hydration Parity**:
+2. **Native SQLite Chat Storage Engine (`chat-store.js`)**:
+   - Replaced legacy file writes with Node.js 22 native `node:sqlite` database (`chats.sqlite`) with ACID transactions, foreign keys, cascading deletes, and revision checks.
+   - Enhanced `PUT /api/chats/:chatId` enables client-side streaming synchronization of titles, attachments, and message arrays.
+   - Administrative account deletions cascade cleanly across user chats via `deleteUserChats`.
+3. **Upstash Redis Distributed Quota Architecture (`quota-redis.js`, `ask-quota.js`)**:
+   - Integrated Upstash Redis client with Lua scripts (`checkAndReserve`, `applyReportedUsage`) for distributed rate limiting (sliding window per-minute sorted sets and daily token/question budgets via hashes).
+   - In-memory fallback guarantees resilient operation if Redis is temporarily unreachable.
+4. **Section 17A Legal Retrieval & Lawyer-Style Reasoning (`legal-retrieval.js`, `ask.js`)**:
+   - Expanded retrieval candidate limit to 40 points with multi-clause grouping (`splitPassage`, `clausePoints`, `assemblePassages`) tailored for Section 17A and Section 54/55 of The Transfer of Property Act, 1882.
+   - Added legal ingest CLI (`scripts/legal.js`) and search evaluation suite (`evals/`).
+5. **Watcher Isolation**:
+   - Added explicit `--watch-path` file targets in `backend/package.json` to prevent process reload loops on runtime SQLite database updates.
+6. **Hydration Parity**:
    - Speech recognition (`VoiceInputButton`) and responsive layout components subscribe to client stores via `useSyncExternalStore` for 100% markup agreement between SSR and client hydration.
    - Filtered Three.js r183 `THREE.Clock` deprecation notices emitted internally by the React Three Fiber engine.
 

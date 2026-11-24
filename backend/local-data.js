@@ -5,7 +5,7 @@ const path = require('node:path');
 const accountsFile = process.env.NOTHI_ACCOUNTS_FILE || path.join(__dirname, 'data', 'accounts.json');
 const usageLimitsFile = path.join(path.dirname(accountsFile), 'usage-limits.json');
 const auditLogsFile = path.join(path.dirname(accountsFile), 'audit-logs.json');
-const chatsFile = path.join(path.dirname(accountsFile), 'chats.json');
+const chatsFile = path.join(path.dirname(accountsFile), 'chats.sqlite');
 
 function readLocalJson(file, fallback) {
   try {

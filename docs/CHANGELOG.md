@@ -12,16 +12,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
-## [1.1.0] - 2026-11-24
+## [1.1.0] - 2026-11-25
 
 ### Added
+- **Native SQLite Chat Storage Engine (`backend/chat-store.js`)**:
+  - Integrated Node.js 22 native `node:sqlite` database (`chats.sqlite`) with ACID transactions, foreign keys, cascading deletes, and revision conflict detection.
+  - Implemented `updateFullChat` supporting live synchronization of chat message streams, titles, attachments, and timestamps.
+  - Implemented cascading chat deletion (`deleteUserChats`) and global chat lookup protection (`findChatGlobally`) for administrative controls.
+- **Upstash Redis Distributed Quota Architecture (`backend/quota-redis.js`, `backend/ask-quota.js`)**:
+  - Integrated Redis client with Lua script atomic evaluation (`checkAndReserve`, `applyReportedUsage`) for distributed rate limiting (per-minute sliding window via sorted sets and daily token/question budgets via hashes).
+  - Added resilient in-memory fallback ensuring zero downtime when Redis is unconfigured or unreachable.
+- **Enhanced Legal Retrieval & Section 17A Multi-Clause Grouping (`backend/legal-retrieval.js`)**:
+  - Added candidate limit expansion (40 candidate points), `splitPassage`, clause grouping, and `assemblePassages` for complex multi-clause statutes such as Section 17A and Section 54/55 of The Transfer of Property Act, 1882.
+  - Integrated `intfloat/multilingual-e5-small` embeddings and Qdrant Cloud point querying.
+- **Lawyer-Style Legal Reasoning Prompting (`backend/ask.js`)**:
+  - Integrated lawyer-style statutory prompt rules, Section 17A support, Bangla linguistic verification, truncated answer detection, and preview generation.
+- **Legal Ingest CLI & Evaluation Suite (`backend/scripts/legal.js`, `backend/evals/`)**:
+  - Added CLI ingestion and corpus management tool for Qdrant legal corpus ingest, search, collections, and section replacement.
+  - Added legal search evaluation suite (`legal-search.json` and `review-legal-search.js`).
 - **Permanent, Deterministic User Identifiers**:
   - Stabilized `.env`-seeded accounts (`ADMIN_EMAIL`, `USER_EMAIL`) to use permanent deterministic IDs (`env-admin`, `env-user`) and preserve existing IDs across restarts in `backend/auth.js`.
-- **Disk-Backed Chat Persistence & Synchronization**:
-  - Implemented atomic disk storage for sessions, messages, and attachments in `backend/data/chats.json` with temporary file renames.
-  - Added `PUT /api/chats/:chatId` endpoint supporting live synchronization of chat message streams, titles, attachments, and timestamps.
-- **Node.js Watcher Isolation**:
-  - Configured explicit `--watch-path` targets in `backend/package.json` to prevent process reboots when saving JSON data.
+- **Node.js Watcher Target Isolation**:
+  - Configured explicit `--watch-path` targets in `backend/package.json` (including `chat-store.js` and `quota-redis.js`) to prevent process reboots when saving SQLite or session data.
 
 ### Fixed
 - **VoiceInputButton & Client SSR Hydration Mismatches**:
