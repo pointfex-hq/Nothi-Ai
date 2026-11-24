@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 
 interface VoiceInputButtonProps {
   lang: 'en' | 'bn';
@@ -35,55 +35,66 @@ interface SpeechRecognitionInstance {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
 
+const emptySubscribe = () => () => {};
+
+function getSpeechSupportSnapshot(): boolean {
+  if (typeof window === 'undefined') return false;
+  const w = window as unknown as {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return Boolean(w.SpeechRecognition || w.webkitSpeechRecognition);
+}
+
+function getSpeechSupportServerSnapshot(): boolean {
+  return false;
+}
+
 export function VoiceInputButton({ lang, onTranscript, className = '' }: VoiceInputButtonProps) {
-  const [isSupported] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    const w = window as unknown as {
-      SpeechRecognition?: SpeechRecognitionConstructor;
-      webkitSpeechRecognition?: SpeechRecognitionConstructor;
-    };
-    return Boolean(w.SpeechRecognition || w.webkitSpeechRecognition);
-  });
+  const isSupported = useSyncExternalStore(
+    emptySubscribe,
+    getSpeechSupportSnapshot,
+    getSpeechSupportServerSnapshot
+  );
 
   const [isListening, setIsListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && isSupported) {
-      const w = window as unknown as {
-        SpeechRecognition?: SpeechRecognitionConstructor;
-        webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    if (!isSupported || typeof window === 'undefined') return;
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionConstructor;
+      webkitSpeechRecognition?: SpeechRecognitionConstructor;
+    };
+    const SpeechConstructor = w.SpeechRecognition || w.webkitSpeechRecognition;
+
+    if (SpeechConstructor) {
+      const recognition = new SpeechConstructor();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = lang === 'bn' ? 'bn-BD' : 'en-US';
+
+      recognition.onstart = () => {
+        setIsListening(true);
       };
-      const SpeechConstructor = w.SpeechRecognition || w.webkitSpeechRecognition;
 
-      if (SpeechConstructor) {
-        const recognition = new SpeechConstructor();
-        recognition.continuous = false;
-        recognition.interimResults = true;
-        recognition.lang = lang === 'bn' ? 'bn-BD' : 'en-US';
+      recognition.onresult = (event: SpeechEvent) => {
+        const current = event.resultIndex;
+        const transcript = event.results[current]?.[0]?.transcript;
+        if (transcript) {
+          onTranscript(transcript);
+        }
+      };
 
-        recognition.onstart = () => {
-          setIsListening(true);
-        };
+      recognition.onerror = () => {
+        setIsListening(false);
+      };
 
-        recognition.onresult = (event: SpeechEvent) => {
-          const current = event.resultIndex;
-          const transcript = event.results[current]?.[0]?.transcript;
-          if (transcript) {
-            onTranscript(transcript);
-          }
-        };
+      recognition.onend = () => {
+        setIsListening(false);
+      };
 
-        recognition.onerror = () => {
-          setIsListening(false);
-        };
-
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-
-        recognitionRef.current = recognition;
-      }
+      recognitionRef.current = recognition;
     }
   }, [lang, onTranscript, isSupported]);
 

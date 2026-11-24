@@ -1,7 +1,7 @@
 # Monorepo Consolidation & Full-Stack Integration Report
 
 **Author:** Fahim Uddin (@udnfahim)  
-**System:** Nothi AI (নথি এআই) v1.0 — Statutory Land Document Auditing Platform  
+**System:** Nothi AI (নথি এআই) v1.1 — Statutory Land Document Auditing Platform  
 **Target Environment:** Local Development & Production (Next.js 16 + Express Node.js)
 
 ---
@@ -104,6 +104,39 @@ To ensure strict compliance with institutional legal standards and eliminate una
 3. **Dedicated User Dashboard (`/dashboard`)**: Displays live daily question quotas, token budget usage, rolling rate limits, recent examination sessions, and quick-launch links.
 4. **Dedicated Admin Panel (`/admin`)**: Restricted exclusively to `admin` role with live health monitoring (`GET /api/health`), interactive usage-limit reconfiguration (`GET`/`POST`/`PUT` `/api/admin/usage-limits`), and corpus status auditing.
 5. **Post-Login Routing**: Successful login routes administrators directly to `/admin` and standard vetting users to `/dashboard`.
+
+---
+
+## 7. Strict Per-User Chat Privacy, Lifecycle Controls & Audit Trail
+
+1. **Zero Admin Chat Visibility & Strict Owner Isolation**:
+   - Every examination session is strictly tied to `chat.userId === req.user.id`.
+   - All chat endpoints (`GET /api/chats`, `GET /api/chats/:id`, `POST /api/chats/:id/messages`, attachment routes, and `DELETE /api/chats/:id`) enforce ownership.
+   - Administrators have zero override to inspect or view other users' private sessions or attachments.
+2. **User Lifecycle & Instant Session Revocation**:
+   - Accounts track `status` (`active` | `suspended`), `createdAt`, and `isEnvAccount`.
+   - Admin management endpoints (`GET /api/admin/users`, `PATCH /api/admin/users/:id/status`, `DELETE /api/admin/users/:id`) enable suspension and deletion with safety guards preventing suspension of root environment admins.
+   - Suspended accounts have their active sessions instantly revoked.
+3. **Advocate Profile Settings**:
+   - Authenticated advocates can update display names and change passwords via `PATCH /api/auth/profile` with `scrypt` verification.
+4. **Chronological Administrative Audit Trail**:
+   - Admin actions (status modifications, deletions, quota adjustments) are logged immutably and accessible via `GET /api/admin/audit-logs`.
+
+---
+
+## 8. Chat Persistence Across Restarts & SSR Hydration Stabilization
+
+1. **Permanent, Deterministic User IDs**:
+   - Seeded environment accounts (`ADMIN_EMAIL`, `USER_EMAIL`) utilize immutable IDs (`env-admin`, `env-user`) rather than transient random UUIDs generated on server boot.
+   - User registrations preserve their permanent IDs across backend cold restarts and container redeployments.
+2. **Disk-Backed Atomic Chat Persistence**:
+   - `backend/chats.js` flushes sessions, messages, and attachments to `backend/data/chats.json` with atomic rename writes (`writeLocalJson`), restoring user conversations seamlessly upon re-authentication.
+   - Enhanced `PUT /api/chats/:chatId` enables client-side streaming synchronization of titles and message arrays.
+3. **Watcher Isolation**:
+   - Added explicit `--watch-path` file targets in `backend/package.json` to prevent process reload loops on runtime JSON database updates.
+4. **Hydration Parity**:
+   - Speech recognition (`VoiceInputButton`) and responsive layout components subscribe to client stores via `useSyncExternalStore` for 100% markup agreement between SSR and client hydration.
+   - Filtered Three.js r183 `THREE.Clock` deprecation notices emitted internally by the React Three Fiber engine.
 
 ---
 

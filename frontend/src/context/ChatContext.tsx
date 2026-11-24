@@ -12,6 +12,7 @@ import {
 import type { ChatMessage } from '@/lib/chat';
 import { sendChatMessage } from '@/lib/chat';
 import { useLang } from '@/lib/lang';
+import { getStoredUser } from '@/lib/auth';
 import { getCorpusSectionById, resolveCanonicalId } from '@/lib/citations';
 import type { CorpusSection } from '@/types';
 
@@ -59,6 +60,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.warn('Could not restore chat session:', err);
     }
+
+    const handleAuthChange = () => {
+      if (!getStoredUser()) {
+        setMessages([]);
+        try {
+          sessionStorage.removeItem(STORAGE_KEY);
+        } catch {}
+      }
+    };
+
+    window.addEventListener('nothi_auth_changed', handleAuthChange);
+    window.addEventListener('storage', handleAuthChange);
+    return () => {
+      window.removeEventListener('nothi_auth_changed', handleAuthChange);
+      window.removeEventListener('storage', handleAuthChange);
+    };
   }, []);
 
   // Safe persistence to sessionStorage

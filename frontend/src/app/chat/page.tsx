@@ -26,6 +26,7 @@ import { useAuth } from '@/lib/auth';
 import { SignInModal } from '@/components/auth/SignInModal';
 import { sendChatMessage, ChatMessage, ChatAttachment, ChatCitation } from '@/lib/chat';
 import { hasMarkdownStructure, generateFilenameFromHeading } from '@/lib/markdown';
+import { serverApi, ServerChatMessage } from '@/lib/api';
 import type { CorpusSection } from '@/types';
 
 interface ChatSession {
@@ -44,11 +45,17 @@ function nowTimestamp(): number {
 }
 
 const STORAGE_SESSIONS_KEY = 'nothi_ai_sessions_v4';
-const ACTIVE_SESSION_ID_KEY = 'nothi_ai_active_session_id';
 
 const emptySubscribe = () => () => { };
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
+
+const subscribeWindowResize = (callback: () => void) => {
+  window.addEventListener('resize', callback);
+  return () => window.removeEventListener('resize', callback);
+};
+const getIsDesktopSnapshot = () => window.innerWidth >= 768;
+const getIsDesktopServerSnapshot = () => true;
 
 // 4 Plain Text Suggestions for Clerk's Reading Room Empty State
 const EMPTY_SUGGESTIONS = [
@@ -133,52 +140,25 @@ function getFollowUpChips(content: string, lang: 'en' | 'bn'): string[] {
     : ['What documents are compulsorily registered?', 'How does Lis Pendens affect title?'];
 }
 
-function loadInitialSessions(): { sessions: ChatSession[]; activeSessionId: string } {
-  if (typeof window === 'undefined') {
-    return {
-      sessions: [
-        {
-          id: 'initial_session',
-          title: 'Property Examination',
-          createdAt: 0,
-          messages: [],
-        },
-      ],
-      activeSessionId: 'initial_session',
-    };
+function loadUserCachedSessions(userId?: string): { sessions: ChatSession[]; activeSessionId: string } {
+  if (typeof window === 'undefined' || !userId) {
+    return { sessions: [], activeSessionId: '' };
   }
 
+  const userKey = `nothi_ai_sessions_${userId}`;
+  const userActiveKey = `nothi_ai_active_session_${userId}`;
   try {
-    const stored = localStorage.getItem(STORAGE_SESSIONS_KEY);
-    let parsed: ChatSession[] = stored ? JSON.parse(stored) : [];
-
-    if (!parsed || parsed.length === 0) {
-      const initialSession: ChatSession = {
-        id: makeId('session'),
-        title: 'Property Examination',
-        createdAt: Date.now(),
-        messages: [],
-      };
-      parsed = [initialSession];
-      try {
-        localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify(parsed));
-      } catch {}
-    }
-
-    const savedActiveId = localStorage.getItem(ACTIVE_SESSION_ID_KEY);
-    const activeId = savedActiveId && parsed.some((s) => s.id === savedActiveId)
-      ? savedActiveId
-      : parsed[0].id;
+    const stored = localStorage.getItem(userKey);
+    const parsed: ChatSession[] = stored ? JSON.parse(stored) : [];
+    const savedActiveId = localStorage.getItem(userActiveKey);
+    const activeId =
+      savedActiveId && parsed.some((s) => s.id === savedActiveId)
+        ? savedActiveId
+        : (parsed[0]?.id || '');
 
     return { sessions: parsed, activeSessionId: activeId };
   } catch {
-    const fallbackSession: ChatSession = {
-      id: makeId('session'),
-      title: 'Property Examination',
-      createdAt: Date.now(),
-      messages: [],
-    };
-    return { sessions: [fallbackSession], activeSessionId: fallbackSession.id };
+    return { sessions: [], activeSessionId: '' };
   }
 }
 
@@ -188,10 +168,132 @@ export default function ChatPage() {
   const { user } = useAuth();
   const [signInModalOpen, setSignInModalOpen] = useState(false);
 
-  // Sessions & Active Chat State (Initialized lazily to comply with React 19 pure component rules)
-  const [sessions, setSessions] = useState<ChatSession[]>(() => loadInitialSessions().sessions);
-  const [activeSessionId, setActiveSessionId] = useState<string>(() => loadInitialSessions().activeSessionId);
-  const [sidebarOpen, setSidebarOpen] = useState(() => (typeof window !== 'undefined' ? window.innerWidth >= 768 : true));
+  // Auth & Session States
+  const currentUserId = user?.id ?? null;
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string>('');
+  const [sessionsLoaded, setSessionsLoaded] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    async function syncSessions() {
+      if (!currentUserId) {
+        if (active) {
+          setSessions([]);
+          setActiveSessionId('');
+          setSessionsLoaded(true);
+        }
+        return;
+      }
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlParamId = urlParams.get('id');
+
+      // 1. Fetch live sessions from backend server
+      try {
+        const serverList = await serverApi.chats.list();
+        if (!active) return;
+
+        if (Array.isArray(serverList) && serverList.length > 0) {
+          const userActiveKey = `nothi_ai_active_session_${currentUserId}`;
+          const savedActiveId = localStorage.getItem(userActiveKey);
+          const chosenActiveId =
+            urlParamId && serverList.some((s) => s.id === urlParamId)
+              ? urlParamId
+              : savedActiveId && serverList.some((s) => s.id === savedActiveId)
+              ? savedActiveId
+              : serverList[0].id;
+
+          let activeFullChat = null;
+          try {
+            activeFullChat = await serverApi.chats.get(chosenActiveId);
+          } catch (e) {
+            console.warn('Could not fetch active chat details:', e);
+          }
+
+          const mappedSessions: ChatSession[] = serverList.map((item) => {
+            if (item.id === chosenActiveId && activeFullChat) {
+              return {
+                id: activeFullChat.id,
+                title: activeFullChat.title || item.title || 'Property Examination',
+                createdAt: item.updatedAt || Date.now(),
+                messages: (activeFullChat.messages || []).map((m: ServerChatMessage) => ({
+                  id: m.id,
+                  role: m.role,
+                  content: m.content,
+                  citations: m.citations as ChatCitation[] | undefined,
+                  attachments: m.attachments as ChatAttachment[] | undefined,
+                  timestamp: m.timestamp || Date.now(),
+                })),
+              };
+            }
+            return {
+              id: item.id,
+              title: item.title || 'Property Examination',
+              createdAt: item.updatedAt || Date.now(),
+              messages: [],
+            };
+          });
+
+          if (active) {
+            setSessions(mappedSessions);
+            setActiveSessionId(chosenActiveId);
+            setSessionsLoaded(true);
+            try {
+              localStorage.setItem(`nothi_ai_sessions_${currentUserId}`, JSON.stringify(mappedSessions));
+              localStorage.setItem(userActiveKey, chosenActiveId);
+            } catch {}
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Could not fetch server sessions, falling back to local cache:', err);
+      }
+
+      // 2. Fallback to local storage cache if server was empty or unreachable
+      if (!active) return;
+      const cached = loadUserCachedSessions(currentUserId);
+      if (cached.sessions.length > 0) {
+        setSessions(cached.sessions);
+        setActiveSessionId(
+          urlParamId && cached.sessions.some((s) => s.id === urlParamId)
+            ? urlParamId
+            : cached.activeSessionId
+        );
+        setSessionsLoaded(true);
+        return;
+      }
+
+      // 3. User has zero sessions on server and in cache (clean initial reading room)
+      if (active) {
+        setSessions([]);
+        setActiveSessionId('');
+        setSessionsLoaded(true);
+      }
+    }
+
+    syncSessions();
+    return () => {
+      active = false;
+    };
+  }, [currentUserId]);
+  const isDesktop = useSyncExternalStore(
+    subscribeWindowResize,
+    getIsDesktopSnapshot,
+    getIsDesktopServerSnapshot
+  );
+  const [userSidebarToggle, setUserSidebarToggle] = useState<boolean | null>(null);
+  const sidebarOpen = userSidebarToggle !== null ? userSidebarToggle : isDesktop;
+  const setSidebarOpen = useCallback(
+    (open: boolean | ((prev: boolean) => boolean)) => {
+      setUserSidebarToggle((prevVal) => {
+        const current = prevVal !== null ? prevVal : isDesktop;
+        return typeof open === 'function' ? open(current) : open;
+      });
+    },
+    [isDesktop]
+  );
   const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
 
   // Input & Attachment States
@@ -228,13 +330,15 @@ export default function ChatPage() {
   const persistSessions = useCallback(
     (newSessions: ChatSession[]) => {
       setSessions(newSessions);
+      if (!user) return;
+      const userKey = `nothi_ai_sessions_${user.id}`;
       try {
-        localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify(newSessions));
+        localStorage.setItem(userKey, JSON.stringify(newSessions));
       } catch (e) {
         console.warn('Unable to persist chat sessions to localStorage:', e);
       }
     },
-    []
+    [user]
   );
 
   const activeSession = useMemo(() => {
@@ -283,19 +387,31 @@ export default function ChatPage() {
   };
 
   // ── 3. SESSION MANAGEMENT ─────────────────────────────────────
-  const handleNewChat = () => {
+  const handleNewChat = async () => {
+    let createdId = makeId('session');
+    if (user) {
+      try {
+        const serverChat = await serverApi.chats.create({ title: 'New Examination' });
+        if (serverChat?.id) createdId = serverChat.id;
+      } catch (err) {
+        console.warn('Could not create session on server:', err);
+      }
+    }
+
     const newSession: ChatSession = {
-      id: makeId('session'),
+      id: createdId,
       title: 'New Examination',
       createdAt: nowTimestamp(),
       messages: [],
     };
-    const updated = [newSession, ...sessions];
+    const updated = [newSession, ...sessions.filter((s) => s.id !== createdId)];
     persistSessions(updated);
     setActiveSessionId(newSession.id);
-    try {
-      localStorage.setItem(ACTIVE_SESSION_ID_KEY, newSession.id);
-    } catch { }
+    if (user?.id) {
+      try {
+        localStorage.setItem(`nothi_ai_active_session_${user.id}`, newSession.id);
+      } catch { }
+    }
     setInputText('');
     setAttachments([]);
     setAttachmentError(null);
@@ -308,30 +424,73 @@ export default function ChatPage() {
     }
   };
 
-  const handleSelectSession = (id: string) => {
+  const handleSelectSession = async (id: string) => {
     setActiveSessionId(id);
-    try {
-      localStorage.setItem(ACTIVE_SESSION_ID_KEY, id);
-    } catch { }
+    if (user?.id) {
+      try {
+        localStorage.setItem(`nothi_ai_active_session_${user.id}`, id);
+      } catch { }
+    }
     if (window.innerWidth < 768) {
       setSidebarOpen(false);
     }
+
+    const existing = sessions.find((s) => s.id === id);
+    if (existing && existing.messages.length === 0 && user) {
+      try {
+        const fullChat = await serverApi.chats.get(id);
+        if (fullChat && Array.isArray(fullChat.messages) && fullChat.messages.length > 0) {
+          const mappedMsgs: ChatMessage[] = fullChat.messages.map((m: ServerChatMessage) => ({
+            id: m.id,
+            role: m.role,
+            content: m.content,
+            citations: m.citations as ChatCitation[] | undefined,
+            attachments: m.attachments as ChatAttachment[] | undefined,
+            timestamp: m.timestamp || Date.now(),
+          }));
+          setSessions((prev) => {
+            const updated = prev.map((s) =>
+              s.id === id ? { ...s, title: fullChat.title || s.title, messages: mappedMsgs } : s
+            );
+            persistSessions(updated);
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.warn('Could not load session details from server:', err);
+      }
+    }
   };
 
-  const handleRenameSession = (id: string, newTitle: string) => {
+  const handleRenameSession = async (id: string, newTitle: string) => {
     const updated = sessions.map((s) => (s.id === id ? { ...s, title: newTitle } : s));
     persistSessions(updated);
+    if (user) {
+      try {
+        await serverApi.chats.update(id, { title: newTitle });
+      } catch (e) {
+        console.warn('Could not rename chat on server:', e);
+      }
+    }
   };
 
-  const handleDeleteSession = (id: string) => {
-    if (sessions.length <= 1) {
-      handleNewChat();
-      return;
+  const handleDeleteSession = async (id: string) => {
+    if (user) {
+      try {
+        await serverApi.chats.delete(id);
+      } catch (e) {
+        console.warn('Failed to delete chat on server:', e);
+      }
     }
     const updated = sessions.filter((s) => s.id !== id);
     persistSessions(updated);
-    const nextActive = updated[0].id;
-    setActiveSessionId(nextActive);
+    if (updated.length > 0) {
+      const nextActive = updated[0].id;
+      setActiveSessionId(nextActive);
+      handleSelectSession(nextActive);
+    } else {
+      setActiveSessionId('');
+    }
   };
 
   // ── 4. DATE GROUPING FOR CONVERSATION LIST (Today, Yesterday, Earlier) ──
@@ -608,17 +767,44 @@ export default function ChatPage() {
       timestamp: currentNow,
     };
 
+    let targetSessionId = activeSessionId;
+    const targetTitle = activeSession?.title || 'Property Examination';
+
     // Auto-title session if this is the first message
     const isFirst = messages.length === 0;
-    const newTitle = isFirst ? generateMeaningfulTitle(content, currentAttachments[0]?.name) : activeSession.title;
+    const newTitle = isFirst ? generateMeaningfulTitle(content, currentAttachments[0]?.name) : (activeSession?.title || targetTitle);
+
+    if (!targetSessionId || !sessions.some((s) => s.id === targetSessionId)) {
+      if (user) {
+        try {
+          const created = await serverApi.chats.create({ title: newTitle });
+          if (created?.id) targetSessionId = created.id;
+        } catch {
+          targetSessionId = makeId('session');
+        }
+      } else {
+        targetSessionId = makeId('session');
+      }
+      setActiveSessionId(targetSessionId);
+    }
 
     // Immediately append user message
     const updatedMessagesWithUser = [...messages, userMessage];
-    const updatedSessionsWithUser = sessions.map((s) =>
-      s.id === activeSessionId
-        ? { ...s, title: newTitle, messages: updatedMessagesWithUser }
-        : s
-    );
+    const updatedSessionsWithUser = sessions.some((s) => s.id === targetSessionId)
+      ? sessions.map((s) =>
+          s.id === targetSessionId
+            ? { ...s, title: newTitle, messages: updatedMessagesWithUser }
+            : s
+        )
+      : [
+          {
+            id: targetSessionId,
+            title: newTitle,
+            createdAt: currentNow,
+            messages: updatedMessagesWithUser,
+          },
+          ...sessions,
+        ];
     persistSessions(updatedSessionsWithUser);
 
     // ── STAGE 1: 4-STAGE THINKING SEQUENCE (Snappy, responsive ~360ms total) ──
@@ -688,17 +874,34 @@ export default function ChatPage() {
         };
 
         const finalizedMessages = [...updatedMessagesWithUser, assistantMessage];
-        setSessions((prevSessions) => {
-          const updated = prevSessions.map((s) =>
-            s.id === activeSessionId ? { ...s, messages: finalizedMessages } : s
-          );
-          try {
-            localStorage.setItem(STORAGE_SESSIONS_KEY, JSON.stringify(updated));
-          } catch {}
-          return updated;
-        });
+        const updatedFinalSessions = sessions.some((s) => s.id === targetSessionId)
+          ? sessions.map((s) =>
+              s.id === targetSessionId ? { ...s, title: newTitle, messages: finalizedMessages } : s
+            )
+          : [
+              {
+                id: targetSessionId,
+                title: newTitle,
+                createdAt: currentNow,
+                messages: finalizedMessages,
+              },
+              ...sessions,
+            ];
+
+        persistSessions(updatedFinalSessions);
         setStreamingText('');
         setLogoState('idle');
+
+        // Sync finalized conversation to backend server
+        if (user && targetSessionId) {
+          serverApi.chats
+            .update(targetSessionId, {
+              title: newTitle,
+              messages: finalizedMessages as unknown as ServerChatMessage[],
+              updatedAt: Date.now(),
+            })
+            .catch((err) => console.warn('Could not sync chat messages to server:', err));
+        }
       }
     }
   };
@@ -832,7 +1035,7 @@ export default function ChatPage() {
               নথি এআই
             </span>
             <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-paper-dark border border-border/70 text-ink-muted">
-              v1.0
+              v1.1
             </span>
           </Link>
         </div>
@@ -958,38 +1161,46 @@ export default function ChatPage() {
 
             {/* Conversation List Grouped by Today / Yesterday / Earlier */}
             <div className="flex-1 overflow-y-auto px-2 py-3 space-y-4">
-              {groupedSessions.map((group) => (
-                <div key={group.label} className="space-y-1">
-                  <div className="px-3 text-[11px] font-sans font-semibold text-ink-muted/80 uppercase tracking-wider">
-                    {group.label}
-                  </div>
-
-                  {group.items.map((session) => {
-                    const isActive = session.id === activeSessionId;
-
-                    return (
-                      <div
-                        key={session.id}
-                        onClick={() => handleSelectSession(session.id)}
-                        className={`group relative flex items-center justify-between px-3 py-1.5 rounded-md text-xs font-sans transition-all duration-150 cursor-pointer ${isActive
-                          ? 'bg-paper-dark/70 border-l-[3px] border-green-deep text-green-deep font-semibold shadow-2xs pl-2.5'
-                          : 'text-ink hover:bg-paper-dark/40 hover:text-green-deep'
-                          }`}
-                      >
-                        <span className="truncate pr-2">{session.title}</span>
-
-                        {/* Three dots menu */}
-                        <ChatSessionMenu
-                          sessionId={session.id}
-                          sessionTitle={session.title}
-                          onRename={handleRenameSession}
-                          onDelete={handleDeleteSession}
-                        />
-                      </div>
-                    );
-                  })}
+              {(!mounted || !sessionsLoaded) ? (
+                <div className="space-y-3 px-3 py-2">
+                  <div className="h-4 bg-paper-dark/60 rounded animate-pulse w-3/4" />
+                  <div className="h-4 bg-paper-dark/40 rounded animate-pulse w-1/2" />
+                  <div className="h-4 bg-paper-dark/50 rounded animate-pulse w-2/3" />
                 </div>
-              ))}
+              ) : (
+                groupedSessions.map((group) => (
+                  <div key={group.label} className="space-y-1">
+                    <div className="px-3 text-[11px] font-sans font-semibold text-ink-muted/80 uppercase tracking-wider">
+                      {group.label}
+                    </div>
+
+                    {group.items.map((session) => {
+                      const isActive = session.id === activeSessionId;
+
+                      return (
+                        <div
+                          key={session.id}
+                          onClick={() => handleSelectSession(session.id)}
+                          className={`group relative flex items-center justify-between px-3 py-1.5 rounded-md text-xs font-sans transition-all duration-150 cursor-pointer ${isActive
+                            ? 'bg-paper-dark/70 border-l-[3px] border-green-deep text-green-deep font-semibold shadow-2xs pl-2.5'
+                            : 'text-ink hover:bg-paper-dark/40 hover:text-green-deep'
+                            }`}
+                        >
+                          <span className="truncate pr-2">{session.title}</span>
+
+                          {/* Three dots menu */}
+                          <ChatSessionMenu
+                            sessionId={session.id}
+                            sessionTitle={session.title}
+                            onRename={handleRenameSession}
+                            onDelete={handleDeleteSession}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Sidebar Safe Footer: One disclaimer text link only (laws_corpus.json) */}
@@ -1082,7 +1293,9 @@ export default function ChatPage() {
                 {/* Conversation Header Actions */}
                 <div className="flex items-center justify-between pb-3 border-b border-border/60 text-xs font-sans text-ink-muted">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-ink max-w-[200px] sm:max-w-xs truncate">{activeSession.title}</span>
+                    <span className="font-semibold text-ink max-w-[200px] sm:max-w-xs truncate">
+                      {mounted && sessionsLoaded ? activeSession.title : 'Property Examination'}
+                    </span>
                     <span>•</span>
                     <span>{messages.length} {messages.length === 1 ? 'message' : 'messages'}</span>
                   </div>

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to the **Nothi AI (নথি এআই) v1.0** codebase are documented in this file.
+All notable changes to the **Nothi AI (নথি এআই) v1.1** codebase are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 **Author:** Fahim Uddin (@udnfahim)  
@@ -12,9 +12,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ---
 
+## [1.1.0] - 2026-11-24
+
+### Added
+- **Permanent, Deterministic User Identifiers**:
+  - Stabilized `.env`-seeded accounts (`ADMIN_EMAIL`, `USER_EMAIL`) to use permanent deterministic IDs (`env-admin`, `env-user`) and preserve existing IDs across restarts in `backend/auth.js`.
+- **Disk-Backed Chat Persistence & Synchronization**:
+  - Implemented atomic disk storage for sessions, messages, and attachments in `backend/data/chats.json` with temporary file renames.
+  - Added `PUT /api/chats/:chatId` endpoint supporting live synchronization of chat message streams, titles, attachments, and timestamps.
+- **Node.js Watcher Isolation**:
+  - Configured explicit `--watch-path` targets in `backend/package.json` to prevent process reboots when saving JSON data.
+
+### Fixed
+- **VoiceInputButton & Client SSR Hydration Mismatches**:
+  - Replaced browser window branch in `VoiceInputButton` with `useSyncExternalStore` (`getSpeechSupportSnapshot` / `getSpeechSupportServerSnapshot`), eliminating server-vs-client markup mismatches during React hydration.
+  - Replaced window width branch in `chat/page.tsx` with a responsive resize store subscription (`subscribeWindowResize` / `getIsDesktopSnapshot`), guaranteeing identical initial desktop/mobile hydration markup.
+- **Three.js Clock Deprecation Warning**:
+  - Filtered Three.js r183 `THREE.Clock: This module has been deprecated` warning emitted internally by `@react-three/fiber` in `RegistryDeskCanvas.tsx`.
+
+---
+
 ## [1.0.0] - 2026-11-24
 
 ### Added
+- **Strict Per-User Chat Privacy & Isolation**:
+  - Partitioned all chat sessions and document attachments strictly by authenticated owner (`chat.userId === req.user.id`).
+  - Enforced zero admin override across `GET /api/chats`, `GET /api/chats/:id`, `POST /api/chats/:id/messages`, and `DELETE /api/chats/:id`.
+- **User Lifecycle Management & Instant Session Revocation**:
+  - Added user status (`active` | `suspended`), creation timestamp, and environment account protections in `backend/local-data.js` and `backend/auth.js`.
+  - Added `PATCH /api/admin/users/:id/status` for toggling account suspension with instant session invalidation in `requireUser`.
+  - Added `DELETE /api/admin/users/:id` for permanently deleting user accounts and purging their private chat data.
+  - Added `GET /api/admin/audit-logs` tracking chronological administrative actions.
+- **Advocate Profile & Security Controls**:
+  - Added `PATCH /api/auth/profile` enabling authenticated advocates to update display names and change passwords with `scrypt` verification.
 - **Authentication-First Access Control**:
   - Hid all chat entry points (`Header` chat button, `ChatFloatingLauncher`, `ChatDrawer`, and `AskNothiSection` input) for unauthenticated visitors.
   - Added guest sign-in call-to-actions in `Hero3DSection` and `AskNothiSection` connecting directly to `SignInModal`.

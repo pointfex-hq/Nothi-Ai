@@ -4,6 +4,20 @@ import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
 import { DeskScene, DeskSceneProps } from './DeskScene';
 
+if (typeof window !== 'undefined') {
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]) => {
+    if (
+      typeof args[0] === 'string' &&
+      (args[0].includes('THREE.Clock: This module has been deprecated') ||
+        args[0].includes('Clock: This module has been deprecated'))
+    ) {
+      return;
+    }
+    origWarn.apply(console, args);
+  };
+}
+
 export function RegistryDeskCanvas(props: DeskSceneProps) {
   return (
     <div className="w-full h-full">

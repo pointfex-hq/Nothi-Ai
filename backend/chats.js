@@ -6,10 +6,70 @@ const { sendAskQuotaError, getUserUsage } = require('./ask-quota');
 const { extractPdf } = require('./pdf');
 const { extractPhoto } = require('./ocr');
 const { requireUser } = require('./auth');
+const { chatsFile, readLocalJson, writeLocalJson } = require('./local-data');
 const RequestError = require('./request-error');
 
 const router = express.Router();
-const chatsByUser = new Map();
+
+function readChatsFromDisk() {
+  try {
+    const raw = readLocalJson(chatsFile, []);
+    const map = new Map();
+    if (Array.isArray(raw)) {
+      for (const chat of raw) {
+        if (!chat || !chat.id || !chat.userId) continue;
+        if (!map.has(chat.userId)) map.set(chat.userId, new Map());
+        map.get(chat.userId).set(chat.id, {
+          ...chat,
+          busy: null,
+        });
+      }
+    }
+    return map;
+  } catch (error) {
+    console.warn('Could not read chats from local disk store:', error.message);
+    return new Map();
+  }
+}
+
+const chatsByUser = readChatsFromDisk();
+
+function saveChatsToDisk() {
+  try {
+    const allChats = [];
+    for (const userChats of chatsByUser.values()) {
+      for (const chat of userChats.values()) {
+        allChats.push({
+          ...chat,
+          busy: null,
+        });
+      }
+    }
+    writeLocalJson(chatsFile, allChats);
+  } catch (error) {
+    console.warn('Could not save chats to local disk store:', error.message);
+  }
+}
+
+function getUserChatCount(userId) {
+  const userChats = chatsByUser.get(userId);
+  return userChats ? userChats.size : 0;
+}
+
+function deleteUserChats(userId) {
+  chatsByUser.delete(userId);
+  saveChatsToDisk();
+}
+
+function findChatGlobally(chatId) {
+  for (const [userId, userChats] of chatsByUser.entries()) {
+    if (userChats.has(chatId)) {
+      return { chat: userChats.get(chatId), ownerId: userId };
+    }
+  }
+  return null;
+}
+
 const readFile = express.raw({
   type: ['application/pdf', 'image/jpeg', 'image/png'],
   limit: '5mb',
@@ -41,8 +101,12 @@ router.use(requireUser, (_request, response, next) => {
 });
 
 router.get('/', (_request, response) => {
-  const { chats } = response.locals;
-  response.json([...chats.values()].reverse().sort((a, b) => b.updatedAt - a.updatedAt).map(summarize));
+  const { chats, user } = response.locals;
+  const list = [...chats.values()]
+    .filter(chat => chat.userId === user.id)
+    .sort((a, b) => b.updatedAt - a.updatedAt)
+    .map(summarize);
+  response.json(list);
 });
 
 router.get('/quota', (_request, response) => {
@@ -50,33 +114,73 @@ router.get('/quota', (_request, response) => {
   response.json(getUserUsage(userId));
 });
 
-router.post('/', (_request, response) => {
+router.post('/', readJson, (request, response) => {
+  const userId = response.locals.user.id;
+  const { id, title, attachments, messages } = request.body || {};
   const chat = {
-    id: randomUUID(),
-    title: 'New chat',
+    id: (typeof id === 'string' && id.trim()) ? id.trim() : randomUUID(),
+    userId,
+    title: (typeof title === 'string' && title.trim()) ? title.trim() : 'New chat',
     updatedAt: Date.now(),
-    attachments: { pdf: null, photo: null },
+    attachments: attachments || { pdf: null, photo: null },
     uploads: { pdf: null, photo: null },
-    messages: [],
+    messages: Array.isArray(messages) ? messages : [],
     busy: null,
   };
   response.locals.chats.set(chat.id, chat);
+  saveChatsToDisk();
   response.status(201).json(chat);
 });
 
 router.param('chatId', (_request, response, next, id) => {
+  const currentUserId = response.locals.user.id;
   const chat = response.locals.chats.get(id);
-  if (!chat) return next(new RequestError(404, 'This chat is no longer available. Chats are kept while the server is running.'));
-  response.locals.chat = chat;
-  next();
+
+  if (chat) {
+    if (chat.userId !== currentUserId) {
+      return next(new RequestError(403, 'You do not have permission to access this chat.'));
+    }
+    response.locals.chat = chat;
+    return next();
+  }
+
+  // Check if chat exists under another user
+  const globalMatch = findChatGlobally(id);
+  if (globalMatch) {
+    return next(new RequestError(403, 'You do not have permission to access this chat.'));
+  }
+
+  return next(new RequestError(404, 'This chat is no longer available.'));
 });
 
 router.get('/:chatId', (_request, response) => response.json(response.locals.chat));
 
+router.put('/:chatId', readJson, (request, response) => {
+  const { chat } = response.locals;
+  requireIdle(chat);
+  const { title, messages, attachments, updatedAt } = request.body || {};
+  if (typeof title === 'string' && title.trim()) {
+    chat.title = title.trim();
+  }
+  if (Array.isArray(messages)) {
+    chat.messages = messages;
+  }
+  if (attachments) {
+    chat.attachments = attachments;
+  }
+  chat.updatedAt = typeof updatedAt === 'number' ? updatedAt : Date.now();
+  saveChatsToDisk();
+  response.json(chat);
+});
+
 router.delete('/:chatId', (_request, response) => {
-  const { chat, chats } = response.locals;
+  const { chat, chats, user } = response.locals;
+  if (chat.userId !== user.id) {
+    throw new RequestError(403, 'You do not have permission to delete this chat.');
+  }
   requireIdle(chat);
   chats.delete(chat.id);
+  saveChatsToDisk();
   response.json({ id: chat.id });
 });
 
@@ -108,6 +212,7 @@ router.post('/:chatId/document', readFile, async (request, response) => {
     chat.attachments[kind] = { name, kind, pages };
     chat.uploads[kind] = null;
     resetAttachmentContext(chat);
+    saveChatsToDisk();
   } catch (error) {
     failure = error instanceof RequestError ? error : new RequestError(500, 'Could not extract text from this file. Try again.');
     chat.uploads[kind] = { name, status: 'failed', error: failure.message };
@@ -128,6 +233,7 @@ router.delete('/:chatId/document/:kind', (request, response) => {
   chat.attachments[kind] = null;
   chat.uploads[kind] = null;
   if (hadAttachment) resetAttachmentContext(chat);
+  saveChatsToDisk();
   response.json(chat);
 });
 
@@ -146,6 +252,7 @@ router.patch('/:chatId/document', readJson, (request, response) => {
   if (page.text !== text.trim()) {
     page.text = text.trim();
     resetAttachmentContext(chat);
+    saveChatsToDisk();
   }
   response.json(chat);
 });
@@ -173,6 +280,7 @@ router.post('/:chatId/messages', readJson, async (request, response) => {
       { id: randomUUID(), role: 'assistant', mode, ...answer },
     );
     chat.updatedAt = Date.now();
+    saveChatsToDisk();
   } finally {
     chat.busy = null;
   }
@@ -191,3 +299,5 @@ router.use((error, request, response, next) => {
 });
 
 module.exports = router;
+module.exports.getUserChatCount = getUserChatCount;
+module.exports.deleteUserChats = deleteUserChats;

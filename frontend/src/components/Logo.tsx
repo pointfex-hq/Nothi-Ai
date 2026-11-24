@@ -104,7 +104,7 @@ export function Logo({ className = '' }: LogoProps) {
           নথি এআই
         </span>
         <span className="text-[10px] sm:text-xs font-mono font-medium px-1.5 py-0.5 rounded-full bg-paper-dark/90 border border-border/80 text-ink-muted">
-          v1.0
+          v1.1
         </span>
       </div>
     </div>

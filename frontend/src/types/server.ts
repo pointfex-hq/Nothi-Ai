@@ -1,11 +1,15 @@
 /**
- * Server API types matching server/ endpoints
+ * Server API types matching backend/ endpoints
  */
 
 export interface ServerUser {
   id: string;
   username: string;
+  name?: string;
   role: 'admin' | 'user';
+  status?: 'active' | 'suspended';
+  createdAt?: number;
+  isEnvAccount?: boolean;
 }
 
 export interface ServerChatSummary {
@@ -46,6 +50,8 @@ export interface ServerChatMessage {
     officialUrl?: string;
     pageNumber?: number;
   }>;
+  timestamp?: number;
+  attachments?: unknown[];
 }
 
 export interface ServerChat {
@@ -71,3 +77,23 @@ export interface ServerUsageLimits {
   dailyTokenBudget: number;
 }
 
+export interface ServerAdminUser {
+  id: string;
+  username: string;
+  email: string;
+  name?: string;
+  role: 'admin' | 'user';
+  status: 'active' | 'suspended';
+  createdAt: number;
+  isEnvAccount?: boolean;
+  chatCount: number;
+}
+
+export interface ServerAuditLog {
+  id: string;
+  action: 'USER_SUSPENDED' | 'USER_REACTIVATED' | 'USER_DELETED' | 'QUOTA_UPDATED';
+  adminId: string;
+  targetId?: string | null;
+  details?: string;
+  timestamp: number;
+}

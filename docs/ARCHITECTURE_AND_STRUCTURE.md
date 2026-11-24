@@ -1,9 +1,9 @@
 # System Architecture & Directory Structure
 
 **Author:** Fahim Uddin (@udnfahim)  
-**System:** Nothi AI (নথি এআই) v1.0 — Statutory Land Document Auditing Platform  
+**System:** Nothi AI (নথি এআই) v1.1 — Statutory Land Document Auditing Platform  
 **Architecture:** Decoupled Two-Stack Monorepo (Next.js 16 + Node.js Express)  
-**Document Version:** 1.0.0 (Production-Hardened)
+**Document Version:** 1.1.0 (Production-Hardened)
 
 ---
 
@@ -205,18 +205,28 @@ All endpoints are hosted by Express on `http://127.0.0.1:3001` and accessible fr
 | **POST** | `/api/auth/register` | Public | Registers a new local vetting user |
 | **POST** | `/api/auth/logout` | Authenticated | Clears session cookie and invalidates session token |
 | **GET** | `/api/auth/session` | Authenticated | Returns current authenticated user and role profile |
+| **PATCH** | `/api/auth/profile` | Authenticated | Updates display name and changes password with scrypt verification |
 | **POST** | `/api/audit/run` | Authenticated | Runs deterministic land document audit (Deed, Khatian, NID) |
 | **POST** | `/api/audit/upload` | Authenticated | Ingests document bundles and returns entity extraction draft |
 | **GET** | `/api/chats/quota` | Authenticated | Live daily questions and token budget usage monitor |
 | **POST** | `/api/chat` | Authenticated | Direct statutory analysis chat grounded in `laws_corpus.json` |
-| **GET** | `/api/chats` | Authenticated | Lists recent chat sessions |
-| **POST** | `/api/chats` | Authenticated | Creates a new chat session |
-| **GET** | `/api/chats/:id` | Authenticated | Retrieves conversation history for session `:id` |
+| **GET** | `/api/chats` | Authenticated | Lists user's private chat sessions (strict owner isolation) |
+| **POST** | `/api/chats` | Authenticated | Creates a new private chat session |
+| **GET** | `/api/chats/:id` | Authenticated | Retrieves conversation history (enforces owner ID, zero admin bypass) |
+| **PUT** | `/api/chats/:id` | Authenticated | Updates/persists title, messages, attachments to `chats.json` |
 | **POST** | `/api/chats/:id/messages` | Authenticated | Appends message and generates LLM reply with citations |
-| **POST** | `/api/chats/:id/attachments` | Authenticated | Uploads Deed scan or Khatian PDF to chat session |
+| **POST** | `/api/chats/:id/document` | Authenticated | Uploads Deed scan or Khatian PDF to private chat session |
+| **DELETE** | `/api/chats/:id` | Authenticated | Deletes private chat session (owner only) |
+| **PATCH** | `/api/admin/users/:id/status` | Admin Only | Toggles user status (active/suspended) with instant session revocation |
+| **DELETE** | `/api/admin/users/:id` | Admin Only | Permanently deletes account and purges user's private chat history |
+| **GET** | `/api/admin/audit-logs` | Admin Only | Retrieves chronological administrative audit logs |
 | **POST** | `/api/ask` | Authenticated | Single-turn statutory question answering with vector search |
 | **POST** | `/api/ocr` | Authenticated | Ingests image (JPG, PNG) and returns OCR text via Tesseract/Sharp |
 | **POST** | `/api/extract` | Authenticated | Ingests PDF document and returns extracted text via PDF.js |
+| **GET** | `/api/admin/users` | Admin Only | Fetches sanitized user directory with aggregate chat metrics |
+| **PATCH** | `/api/admin/users/:id/status` | Admin Only | Toggles active/suspended account status with instant token revocation |
+| **DELETE** | `/api/admin/users/:id` | Admin Only | Permanently deletes user account, revokes sessions, and purges data |
+| **GET** | `/api/admin/audit-logs` | Admin Only | Retrieves immutable chronological administrative activity audit trail |
 | **GET** | `/api/admin/usage-limits` | Admin Only | Fetches system token usage limits and quota configurations |
 | **POST** | `/api/admin/usage-limits` | Admin Only | Updates system token usage limits and per-role quotas |
 
