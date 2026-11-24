@@ -19,8 +19,12 @@ import type {
   ServerUser,
   ServerChat,
   ServerChatSummary,
+  ServerChatMessage,
+  ServerAttachment,
   ServerAttachmentPage,
   ServerUsageLimits,
+  ServerAdminUser,
+  ServerAuditLog,
 } from '@/types/server';
 
 export * from '@/types/server';
@@ -120,6 +124,18 @@ export const serverApi = {
     async logout(): Promise<{ user: null }> {
       return this.signOut();
     },
+
+    async updateProfile(data: {
+      name?: string;
+      currentPassword?: string;
+      newPassword?: string;
+    }): Promise<{ user: ServerUser }> {
+      return apiRequest<{ user: ServerUser }>('/api/auth/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+    },
   },
 
   /** Statutory Audit Pipeline endpoints */
@@ -158,8 +174,33 @@ export const serverApi = {
       return apiRequest('/api/chats/quota');
     },
 
-    async create(): Promise<ServerChat> {
-      return apiRequest<ServerChat>('/api/chats', { method: 'POST' });
+    async create(data?: {
+      id?: string;
+      title?: string;
+      messages?: ServerChatMessage[];
+      attachments?: { pdf: ServerAttachment | null; photo: ServerAttachment | null };
+    }): Promise<ServerChat> {
+      return apiRequest<ServerChat>('/api/chats', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {}),
+      });
+    },
+
+    async update(
+      chatId: string,
+      data: {
+        title?: string;
+        messages?: ServerChatMessage[];
+        attachments?: { pdf: ServerAttachment | null; photo: ServerAttachment | null };
+        updatedAt?: number;
+      }
+    ): Promise<ServerChat> {
+      return apiRequest<ServerChat>(`/api/chats/${chatId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
     },
 
     async get(chatId: string): Promise<ServerChat> {
@@ -267,6 +308,28 @@ export const serverApi = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(limits),
       });
+    },
+
+    async getUsers(): Promise<ServerAdminUser[]> {
+      return apiRequest<ServerAdminUser[]>('/api/admin/users');
+    },
+
+    async updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<ServerAdminUser> {
+      return apiRequest<ServerAdminUser>(`/api/admin/users/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+    },
+
+    async deleteUser(id: string): Promise<{ success: boolean; id: string }> {
+      return apiRequest<{ success: boolean; id: string }>(`/api/admin/users/${id}`, {
+        method: 'DELETE',
+      });
+    },
+
+    async getAuditLogs(): Promise<ServerAuditLog[]> {
+      return apiRequest<ServerAuditLog[]>('/api/admin/audit-logs');
     },
   },
 };

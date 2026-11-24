@@ -16,6 +16,10 @@ const subscribeReducedMotion = (callback: () => void) => {
 const getReducedMotionSnapshot = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 const getReducedMotionServerSnapshot = () => false;
 
+const emptySubscribe = () => () => {};
+const getClientSnapshot = () => true;
+const getServerSnapshot = () => false;
+
 export function Header() {
   const { lang, setLang } = useLang();
   const { user, signOut } = useAuth();
@@ -23,7 +27,8 @@ export function Header() {
 
   const isHome = pathname === '/';
 
-  // Scroll & auth states
+  // Scroll, mount & auth states
+  const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
   const [signInModalOpen, setSignInModalOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [isVisible, setIsVisible] = useState(true);
@@ -237,64 +242,66 @@ export function Header() {
             </div>
 
             {/* Registration & Sign In / User Profile Options (Desktop/Tablet; on mobile available in hamburger drawer) */}
-            <div suppressHydrationWarning className="flex items-center">
-              {user ? (
-                <div className="hidden sm:flex items-center gap-1.5 sm:gap-2">
-                  <Link
-                    href={user.role === 'admin' ? '/admin' : '/dashboard'}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-paper-dark/70 hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs hover:border-brass/60"
-                    title={`Signed in as ${user.name}`}
-                  >
-                    <span className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-amber-600' : 'bg-emerald-600'} animate-pulse`} />
-                    <span className="max-w-[110px] truncate">{user.name.replace('Advocate ', 'Adv. ')}</span>
-                    <span className="text-[10px] font-mono uppercase px-1 rounded bg-paper border border-border/70 text-ink-muted">
-                      {user.role}
-                    </span>
-                  </Link>
+            <div className="flex items-center min-h-[32px]">
+              {mounted && (
+                user ? (
+                  <div className="hidden sm:flex items-center gap-1.5 sm:gap-2">
+                    <Link
+                      href={user.role === 'admin' ? '/admin' : '/dashboard'}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-paper-dark/70 hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs hover:border-brass/60"
+                      title={`Signed in as ${user.name}`}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-amber-600' : 'bg-emerald-600'} animate-pulse`} />
+                      <span className="max-w-[110px] truncate">{user.name.replace('Advocate ', 'Adv. ')}</span>
+                      <span className="text-[10px] font-mono uppercase px-1 rounded bg-paper border border-border/70 text-ink-muted">
+                        {user.role}
+                      </span>
+                    </Link>
 
-                  <Link
-                    href={user.role === 'admin' ? '/admin' : '/dashboard'}
-                    className="px-2.5 py-1.5 rounded-full text-xs font-sans font-medium text-ink-muted hover:text-ink hover:bg-paper-dark/70 transition-colors"
-                  >
-                    {user.role === 'admin'
-                      ? (lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel')
-                      : (lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard')}
-                  </Link>
+                    <Link
+                      href={user.role === 'admin' ? '/admin' : '/dashboard'}
+                      className="px-2.5 py-1.5 rounded-full text-xs font-sans font-medium text-ink-muted hover:text-ink hover:bg-paper-dark/70 transition-colors"
+                    >
+                      {user.role === 'admin'
+                        ? (lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel')
+                        : (lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard')}
+                    </Link>
 
-                  <Link
-                    href="/chat"
-                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-green-deep hover:bg-green-mid text-paper font-sans text-xs font-semibold shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
-                    title="Open Nothi AI Chat"
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                    <span>{lang === 'bn' ? 'চ্যাট' : 'Chat'}</span>
-                    <span className="text-brass">→</span>
-                  </Link>
+                    <Link
+                      href="/chat"
+                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-green-deep hover:bg-green-mid text-paper font-sans text-xs font-semibold shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
+                      title="Open Nothi AI Chat"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                      </svg>
+                      <span>{lang === 'bn' ? 'চ্যাট' : 'Chat'}</span>
+                      <span className="text-brass">→</span>
+                    </Link>
 
+                    <button
+                      type="button"
+                      onClick={() => signOut()}
+                      className="text-xs font-sans font-medium text-ink-muted hover:text-vermillion px-2 py-1 rounded-full hover:bg-paper-dark transition-colors cursor-pointer"
+                      title="Sign out of your account"
+                    >
+                      {lang === 'bn' ? 'সাইন আউট' : 'Sign out'}
+                    </button>
+                  </div>
+                ) : (
                   <button
                     type="button"
-                    onClick={() => signOut()}
-                    className="text-xs font-sans font-medium text-ink-muted hover:text-vermillion px-2 py-1 rounded-full hover:bg-paper-dark transition-colors cursor-pointer"
-                    title="Sign out of your account"
+                    onClick={() => setSignInModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-brass/50 bg-paper hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs hover:border-brass cursor-pointer"
+                    title="Sign in to your account"
                   >
-                    {lang === 'bn' ? 'সাইন আউট' : 'Sign out'}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
+                      <circle cx="12" cy="7" r="4" />
+                    </svg>
+                    <span>{lang === 'bn' ? 'সাইন ইন' : 'Sign In'}</span>
                   </button>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setSignInModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full border border-brass/50 bg-paper hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs hover:border-brass cursor-pointer"
-                  title="Sign in to your account"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
-                    <circle cx="12" cy="7" r="4" />
-                  </svg>
-                  <span>{lang === 'bn' ? 'সাইন ইন' : 'Sign In'}</span>
-                </button>
+                )
               )}
             </div>
 
@@ -351,7 +358,7 @@ export function Header() {
                 })}
 
                 {/* Direct Chat Link in Mobile Navigation (Only for Authenticated Users) */}
-                {user && (
+                {mounted && user && (
                   <>
                     <Link
                       href={user.role === 'admin' ? '/admin' : '/dashboard'}
@@ -382,7 +389,7 @@ export function Header() {
 
             {/* Bottom Actions */}
             <div className="pt-6 border-t border-border space-y-3">
-              {user ? (
+              {mounted && user ? (
                 <div className="space-y-2">
                   <div className="p-3 rounded-xl bg-paper-dark/60 border border-border text-xs">
                     <span className="text-ink-muted block text-[10px] uppercase font-mono">Signed in as</span>

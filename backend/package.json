@@ -1,13 +1,13 @@
 {
   "name": "backend",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "license": "UNLICENSED",
   "description": "Nothi AI Node.js Backend Server",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "node --watch index.js",
+    "dev": "node --watch --watch-path=index.js --watch-path=admin.js --watch-path=ask-quota.js --watch-path=ask.js --watch-path=audit.js --watch-path=auth.js --watch-path=chat-statutory.js --watch-path=chats.js --watch-path=legal-retrieval.js --watch-path=local-data.js --watch-path=ocr.js --watch-path=pdf.js --watch-path=request-error.js --watch-path=usage-limit-settings.js index.js",
     "test": "node --check index.js"
   },
   "keywords": [],

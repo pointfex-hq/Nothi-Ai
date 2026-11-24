@@ -1,7 +1,7 @@
 const express = require('express');
 const { randomBytes, randomUUID, scrypt, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
-const { accountsFile, readLocalJson, writeLocalJson } = require('./local-data');
+const { accountsFile, auditLogsFile, readLocalJson, writeLocalJson } = require('./local-data');
 const RequestError = require('./request-error');
 
 const router = express.Router();
@@ -23,7 +23,12 @@ const fallbackHash = randomBytes(64);
 function readAccounts() {
   try {
     const records = readLocalJson(accountsFile, []);
-    return new Map(records.map(account => [account.username.toLowerCase(), account]));
+    return new Map(records.map(account => [account.username.toLowerCase(), {
+      ...account,
+      status: account.status || 'active',
+      createdAt: account.createdAt || Date.now(),
+      isEnvAccount: Boolean(account.isEnvAccount),
+    }]));
   } catch (error) {
     throw new Error('Could not read the local account store.', { cause: error });
   }
@@ -37,41 +42,60 @@ function saveAccount(account) {
     throw new RequestError(409, 'That username is already taken.');
   }
 
-  writeLocalJson(accountsFile, [...accounts.values(), account]);
-  accounts.set(normalized, account);
+  const record = {
+    ...account,
+    status: account.status || 'active',
+    createdAt: account.createdAt || Date.now(),
+    isEnvAccount: Boolean(account.isEnvAccount),
+  };
+  accounts.set(normalized, record);
+  writeLocalJson(accountsFile, [...accounts.values()]);
 }
 
 // ── Environment-Driven Admin and Normal User Initialization ───
 async function initializeEnvUsers() {
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD?.trim();
-  if (adminEmail && adminPassword && !accounts.has(adminEmail)) {
+  if (adminEmail && adminPassword) {
+    const existing = accounts.get(adminEmail);
     const salt = randomBytes(16);
     const hash = await deriveKey(adminPassword, salt, 64, hashOptions);
     const adminAccount = {
-      id: randomUUID(),
+      id: existing?.id || 'env-admin',
       username: adminEmail,
+      name: existing?.name || 'Chamber Administrator',
       salt: salt.toString('hex'),
       hash: hash.toString('hex'),
       role: 'admin',
+      status: existing?.status || 'active',
+      createdAt: existing?.createdAt || Date.now(),
+      isEnvAccount: true,
     };
-    saveAccount(adminAccount);
+    accounts.set(adminEmail, adminAccount);
+    writeLocalJson(accountsFile, [...accounts.values()]);
     adminIds.add(adminEmail);
+    adminIds.add(adminAccount.id);
   }
 
   const userEmail = process.env.USER_EMAIL?.trim().toLowerCase();
   const userPassword = process.env.USER_PASSWORD?.trim();
-  if (userEmail && userPassword && !accounts.has(userEmail)) {
+  if (userEmail && userPassword) {
+    const existing = accounts.get(userEmail);
     const salt = randomBytes(16);
     const hash = await deriveKey(userPassword, salt, 64, hashOptions);
     const userAccount = {
-      id: randomUUID(),
+      id: existing?.id || 'env-user',
       username: userEmail,
+      name: existing?.name || 'Advocate Rafiqul Islam',
       salt: salt.toString('hex'),
       hash: hash.toString('hex'),
       role: 'user',
+      status: existing?.status || 'active',
+      createdAt: existing?.createdAt || Date.now(),
+      isEnvAccount: true,
     };
-    saveAccount(userAccount);
+    accounts.set(userEmail, userAccount);
+    writeLocalJson(accountsFile, [...accounts.values()]);
   }
 }
 
@@ -92,19 +116,23 @@ function getCredentials(request) {
   return { username: normalized, password };
 }
 
-function publicUser({ id, username, role }) {
+function publicUser(account) {
   const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
   const isAdmin =
-    role === 'admin' ||
-    (adminEmail && username.toLowerCase() === adminEmail) ||
-    adminIds.has(id.toLowerCase()) ||
-    adminIds.has(username.toLowerCase());
+    account.role === 'admin' ||
+    (adminEmail && account.username.toLowerCase() === adminEmail) ||
+    adminIds.has(account.id.toLowerCase()) ||
+    adminIds.has(account.username.toLowerCase());
 
   return {
-    id,
-    username,
-    email: username,
+    id: account.id,
+    name: account.name || (account.username.split('@')[0]),
+    username: account.username,
+    email: account.username,
     role: isAdmin ? 'admin' : 'user',
+    status: account.status || 'active',
+    createdAt: account.createdAt || Date.now(),
+    isEnvAccount: Boolean(account.isEnvAccount),
   };
 }
 
@@ -120,7 +148,12 @@ function currentUser(request) {
     sessions.delete(token);
     return null;
   }
-  return session.user;
+  const account = accounts.get(session.user.username.toLowerCase());
+  if (!account || account.status === 'suspended') {
+    sessions.delete(token);
+    return null;
+  }
+  return publicUser(account);
 }
 
 function cookieOptions(request) {
@@ -151,9 +184,29 @@ function startSession(request, response, account, status) {
 }
 
 function requireUser(request, response, next) {
-  const user = currentUser(request);
-  if (!user) return response.status(401).json({ error: 'Sign in to continue.' });
-  response.locals.user = user;
+  const token = getSessionToken(request);
+  if (!token) return response.status(401).json({ error: 'Sign in to continue.' });
+
+  const session = sessions.get(token);
+  if (!session || session.expiresAt <= Date.now()) {
+    if (session) sessions.delete(token);
+    return response.status(401).json({ error: 'Sign in to continue.' });
+  }
+
+  const account = accounts.get(session.user.username.toLowerCase());
+  if (!account) {
+    sessions.delete(token);
+    response.clearCookie(sessionCookie, cookieOptions(request));
+    return response.status(401).json({ error: 'Your account no longer exists.' });
+  }
+
+  if (account.status === 'suspended') {
+    sessions.delete(token);
+    response.clearCookie(sessionCookie, cookieOptions(request));
+    return response.status(403).json({ error: 'Your account has been suspended by an administrator.' });
+  }
+
+  response.locals.user = publicUser(account);
   next();
 }
 
@@ -163,7 +216,17 @@ async function handleRegister(request, response) {
 
   const salt = randomBytes(16);
   const hash = await deriveKey(password, salt, 64, hashOptions);
-  const account = { id: randomUUID(), username, salt: salt.toString('hex'), hash: hash.toString('hex') };
+  const account = {
+    id: randomUUID(),
+    username,
+    name: (typeof request.body?.name === 'string' && request.body.name.trim()) ? request.body.name.trim().slice(0, 80) : username.split('@')[0],
+    salt: salt.toString('hex'),
+    hash: hash.toString('hex'),
+    role: 'user',
+    status: 'active',
+    createdAt: Date.now(),
+    isEnvAccount: false,
+  };
   saveAccount(account);
   startSession(request, response, account, 201);
 }
@@ -177,6 +240,9 @@ async function handleSignIn(request, response) {
   if (!timingSafeEqual(hash, expected) || !account) {
     throw new RequestError(401, 'The username or password is incorrect.');
   }
+  if (account.status === 'suspended') {
+    throw new RequestError(403, 'Your account has been suspended by an administrator.');
+  }
   startSession(request, response, account, 200);
 }
 
@@ -185,6 +251,58 @@ function handleSignOut(request, response) {
   response.clearCookie(sessionCookie, cookieOptions(request));
   response.json({ user: null });
 }
+
+// ── Profile and Security Update Endpoint ───
+router.patch('/profile', requireUser, express.json({ limit: '8kb' }), async (request, response) => {
+  const user = response.locals.user;
+  const account = accounts.get(user.username.toLowerCase());
+  if (!account) throw new RequestError(404, 'Account not found.');
+
+  const { name, currentPassword, newPassword } = request.body || {};
+
+  // Display Name Update
+  if (typeof name === 'string' && name.trim()) {
+    account.name = name.trim().slice(0, 80);
+  }
+
+  // Password Update
+  if (newPassword) {
+    if (account.isEnvAccount) {
+      throw new RequestError(400, 'Password for environment-seeded accounts is managed via .env configuration.');
+    }
+    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
+      throw new RequestError(400, 'Use a new password between 8 and 128 characters.');
+    }
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      throw new RequestError(400, 'Enter your current password to confirm changes.');
+    }
+
+    const salt = Buffer.from(account.salt, 'hex');
+    const expected = Buffer.from(account.hash, 'hex');
+    const hash = await deriveKey(currentPassword, salt, 64, hashOptions);
+    if (!timingSafeEqual(hash, expected)) {
+      throw new RequestError(400, 'Current password verification failed.');
+    }
+
+    const newSalt = randomBytes(16);
+    const newHash = await deriveKey(newPassword, newSalt, 64, hashOptions);
+    account.salt = newSalt.toString('hex');
+    account.hash = newHash.toString('hex');
+  }
+
+  accounts.set(account.username.toLowerCase(), account);
+  writeLocalJson(accountsFile, [...accounts.values()]);
+
+  const updatedUser = publicUser(account);
+  // Update session references
+  for (const session of sessions.values()) {
+    if (session.user.id === account.id) {
+      session.user = updatedUser;
+    }
+  }
+
+  response.json({ user: updatedUser });
+});
 
 router.get('/session', (request, response) => {
   response.json({ user: currentUser(request) });
@@ -210,4 +328,100 @@ router.use((error, _request, response, next) => {
   response.status(error.status || 500).json({ error: message });
 });
 
-module.exports = { authRouter: router, requireUser };
+// ── Admin Lifecycle Operations ───
+function listUsers() {
+  return [...accounts.values()].map(publicUser);
+}
+
+function updateUserStatus(userId, status, actorId) {
+  const account = [...accounts.values()].find(a => a.id === userId);
+  if (!account) throw new RequestError(404, 'User account not found.');
+
+  if (account.isEnvAccount && account.role === 'admin') {
+    throw new RequestError(400, 'Cannot modify status of root environment administrator.');
+  }
+
+  if (status !== 'active' && status !== 'suspended') {
+    throw new RequestError(400, 'Status must be active or suspended.');
+  }
+
+  account.status = status;
+  accounts.set(account.username.toLowerCase(), account);
+  writeLocalJson(accountsFile, [...accounts.values()]);
+
+  recordAuditLog({
+    action: status === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
+    adminId: actorId,
+    targetId: userId,
+    details: `Account ${account.username} marked ${status}`,
+  });
+
+  return publicUser(account);
+}
+
+function deleteUser(userId, actorId) {
+  const account = [...accounts.values()].find(a => a.id === userId);
+  if (!account) throw new RequestError(404, 'User account not found.');
+
+  if (account.isEnvAccount) {
+    throw new RequestError(400, 'Cannot delete an environment-provisioned account.');
+  }
+
+  if (account.role === 'admin') {
+    throw new RequestError(400, 'Cannot delete administrator accounts.');
+  }
+
+  accounts.delete(account.username.toLowerCase());
+  writeLocalJson(accountsFile, [...accounts.values()]);
+
+  // Invalidate any active sessions
+  for (const [token, sess] of sessions.entries()) {
+    if (sess.user.id === userId || sess.user.username.toLowerCase() === account.username.toLowerCase()) {
+      sessions.delete(token);
+    }
+  }
+
+  recordAuditLog({
+    action: 'USER_DELETED',
+    adminId: actorId,
+    targetId: userId,
+    details: `Account ${account.username} permanently deleted`,
+  });
+
+  return { success: true, id: userId };
+}
+
+// ── Admin Audit Logging Store ───
+function recordAuditLog({ action, adminId, targetId, details }) {
+  try {
+    const logs = readLocalJson(auditLogsFile, []);
+    const entry = {
+      id: randomUUID(),
+      action,
+      adminId,
+      targetId: targetId || null,
+      details: details || '',
+      timestamp: Date.now(),
+    };
+    logs.unshift(entry);
+    writeLocalJson(auditLogsFile, logs.slice(0, 100));
+    return entry;
+  } catch (err) {
+    console.warn('Failed to record audit log:', err.message);
+    return null;
+  }
+}
+
+function getAuditLogs() {
+  return readLocalJson(auditLogsFile, []);
+}
+
+module.exports = {
+  authRouter: router,
+  requireUser,
+  listUsers,
+  updateUserStatus,
+  deleteUser,
+  recordAuditLog,
+  getAuditLogs,
+};

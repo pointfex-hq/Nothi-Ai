@@ -17,6 +17,15 @@ const chatRouter = require('./chats');
 const { auditRouter } = require('./audit');
 const { chatStatutoryRouter } = require('./chat-statutory');
 
+// Global process error handlers to prevent unexpected service termination
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Promise Rejection at:', promise, 'reason:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
+
 const app = express();
 app.set('trust proxy', 1);
 
@@ -64,7 +73,7 @@ app.use('/api', (request, response, next) => {
 });
 
 app.get('/api/health', (_request, response) => {
-  response.json({ status: 'ok', version: '1.0.0', service: 'Nothi AI' });
+  response.json({ status: 'ok', version: '1.1.0', service: 'Nothi AI' });
 });
 
 // Mount live API routers
@@ -84,7 +93,7 @@ app.use('/api', (_request, response) => {
 app.get('/', (_request, response) => {
   response.json({
     service: 'Nothi AI Backend Server',
-    version: '1.0.0',
+    version: '1.1.0',
     status: 'ok',
     endpoints: {
       health: '/api/health',
@@ -98,6 +107,15 @@ app.get('/', (_request, response) => {
       admin: '/api/admin',
     },
   });
+});
+
+// Global Express error handler
+app.use((error, _request, response, _next) => {
+  console.error('Server error handled:', error);
+  if (response.headersSent) return;
+  const status = error.status || 500;
+  const message = error.message || 'An unexpected internal server error occurred.';
+  response.status(status).json({ error: message });
 });
 
 app.listen(port, host, error => {

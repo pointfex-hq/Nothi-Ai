@@ -111,7 +111,7 @@ export function VettingMemo({
       {/* Memo Attestation Footer */}
       <div className="mt-8 pt-6 border-t border-border grid grid-cols-2 gap-4 text-xs font-mono text-ink-muted">
         <div>
-          <div>Auditing Officer: Legal Vetting Engine v1.0</div>
+          <div>Auditing Officer: Legal Vetting Engine v1.1</div>
           <div>Pointfex Land Intelligence — Team Boron</div>
         </div>
         <div className="text-right">

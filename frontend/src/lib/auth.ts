@@ -27,9 +27,30 @@ export function getStoredUser(): NothiUser | null {
   }
 }
 
+export function clearChatCaches(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.removeItem('nothi_ai_chat_v1');
+    localStorage.removeItem('nothi_ai_sessions_v4');
+    localStorage.removeItem('nothi_ai_active_session_v4');
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith('nothi_ai_sessions_') || key.startsWith('nothi_ai_active_session_'))) {
+        localStorage.removeItem(key);
+      }
+    }
+  } catch (err) {
+    console.warn('Could not clear chat caches:', err);
+  }
+}
+
 export function setStoredUser(user: NothiUser): void {
   if (typeof window === 'undefined') return;
   try {
+    const existing = getStoredUser();
+    if (existing && existing.id !== user.id) {
+      clearChatCaches();
+    }
     localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
     window.dispatchEvent(new Event(EVENT_NAME));
   } catch (err) {
@@ -41,6 +62,7 @@ export function clearStoredUser(): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    clearChatCaches();
     window.dispatchEvent(new Event(EVENT_NAME));
   } catch (err) {
     console.error('Failed to clear user session:', err);
@@ -167,6 +189,19 @@ export function useAuth() {
     }
   };
 
+  const updateProfile = async (data: { name?: string; currentPassword?: string; newPassword?: string }) => {
+    const res = await serverApi.auth.updateProfile(data);
+    const current = getStoredUser();
+    if (current) {
+      const updated: NothiUser = {
+        ...current,
+        name: res.user.name || (data.name ? data.name : current.name),
+      };
+      setStoredUser(updated);
+    }
+    return res;
+  };
+
   return {
     user,
     isAuthenticated: !!user,
@@ -174,5 +209,6 @@ export function useAuth() {
     signIn,
     register,
     signOut,
+    updateProfile,
   };
 }

@@ -43,7 +43,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Nothi AI (নথি এআই) v1.0 — Legal Document Vetting",
+  title: "Nothi AI (নথি এআই) v1.1 — Legal Document Vetting",
   description:
     "Deterministic auditing of Bangladeshi property transfer documents: Saf Kabala deeds, RS/BS Khatians, and National IDs. By Team Boron at Pointfex.",
   icons: {

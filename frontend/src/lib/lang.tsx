@@ -60,7 +60,7 @@ const translations: Translations = {
   'flag.green':        { en: 'GREEN',  bn: 'সবুজ' },
 
   // Footer
-  'footer.credit':     { en: '© 2026 Pointfex • Developed by Team Boron • Nothi AI v1.0', bn: '© ২০২৬ পয়েন্টফেক্স • টিম বোরন দ্বারা ডেভেলপকৃত • নথি এআই v১.০' },
+  'footer.credit':     { en: '© 2026 Pointfex • Developed by Team Boron • Nothi AI v1.1', bn: '© ২০২৬ পয়েন্টফেক্স • টিম বোরন দ্বারা ডেভেলপকৃত • নথি এআই v১.১' },
 };
 
 interface LangContextType {
