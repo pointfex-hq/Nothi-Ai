@@ -25,7 +25,7 @@ export function Footer() {
           >
             Pointfex
           </a>{' '}
-          • {lang === 'bn' ? 'টিম বোরন দ্বারা ডেভেলপকৃত' : 'Developed by Team Boron'} • Nothi AI v1.1
+          • {lang === 'bn' ? 'টিম বোরন দ্বারা ডেভেলপকৃত' : 'Developed by Team Boron'} • Nothi AI v1.2
         </p>
         <p className="text-xs text-ink-muted font-mono">
           Bangladesh Legal Record & Deed Vetting • Deterministic Engine

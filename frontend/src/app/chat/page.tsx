@@ -1167,7 +1167,7 @@ export default function ChatPage() {
               নথি এআই
             </span>
             <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-paper-dark border border-border/70 text-ink-muted">
-              v1.1
+              v1.2
             </span>
           </Link>
         </div>

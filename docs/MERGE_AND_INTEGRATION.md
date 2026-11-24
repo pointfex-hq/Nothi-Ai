@@ -1,7 +1,7 @@
 # Monorepo Consolidation & Full-Stack Integration Report
 
 **Author:** Fahim Uddin (@udnfahim)  
-**System:** Nothi AI (নথি এআই) v1.1 — Statutory Land Document Auditing Platform  
+**System:** Nothi AI (নথি এআই) v1.2 — Statutory Land Document Auditing Platform  
 **Target Environment:** Local Development & Production (Next.js 16 + Express Node.js)
 
 ---
@@ -144,6 +144,12 @@ To ensure strict compliance with institutional legal standards and eliminate una
 6. **Hydration Parity**:
    - Speech recognition (`VoiceInputButton`) and responsive layout components subscribe to client stores via `useSyncExternalStore` for 100% markup agreement between SSR and client hydration.
    - Filtered Three.js r183 `THREE.Clock` deprecation notices emitted internally by the React Three Fiber engine.
+7. **Frontend Multi-Engine Ask Modes & Document Review**:
+   - Introduced segmented mode switcher in `/chat` supporting `Legal Search`, `Document Q&A`, and `Statutory Vetting`.
+   - Integrated live Redis daily question and token quota monitor with hover tooltip in header.
+   - Built background file extraction for PDF/OCR and added interactive extracted text review modal with word/char counters.
+8. **Production Orchestration**:
+   - Implemented `scripts/start.js` and `npm start` for concurrent production deployment of Next.js (:3000) and Express (:3001) with clean process signal handling.
 
 ---
 

@@ -1,9 +1,9 @@
 # System Architecture & Directory Structure
 
 **Author:** Fahim Uddin (@udnfahim)  
-**System:** Nothi AI (নথি এআই) v1.1 — Statutory Land Document Auditing Platform  
+**System:** Nothi AI (নথি এআই) v1.2 — Statutory Land Document Auditing Platform  
 **Architecture:** Decoupled Two-Stack Monorepo (Next.js 16 + Node.js Express)  
-**Document Version:** 1.1.0 (Production-Hardened)
+**Document Version:** 1.2.0 (Production-Hardened)
 
 ---
 
@@ -89,25 +89,31 @@ Nothi-Ai/                                       Nothi-Ai/
                                                 │   ├── admin.js     [Admin usage limit RBAC]
                                                 │   ├── audit.js     [Live bundle audit engine]
                                                 │   ├── chat-statutory.js [Statutory chat engine]
-                                                │   ├── chats.js     [Session persistence]
-                                                │   ├── ask.js       [LLM question answering]
-                                                │   ├── ask-quota.js [Token quota tracking]
-                                                │   ├── legal-retrieval.js [Qdrant vector search]
-                                                │   ├── ocr.js       [Tesseract + Sharp]
-                                                │   ├── pdf.js       [PDF.js extraction]
+                                                │   ├── chat-store.js     [Native SQLite chat store (node:sqlite)]
+                                                │   ├── chats.js          [Session persistence & routing]
+                                                │   ├── ask.js            [LLM question answering]
+                                                │   ├── ask-quota.js      [Token quota tracking & Redis Lua]
+                                                │   ├── quota-redis.js    [Upstash Redis connection & Lua pool]
+                                                │   ├── legal-retrieval.js [Qdrant Cloud Section 17A vector search]
+                                                │   ├── ocr.js            [Tesseract + Sharp]
+                                                │   ├── pdf.js            [PDF.js extraction]
                                                 │   ├── local-data.js
                                                 │   ├── usage-limit-settings.js
+                                                │   ├── scripts/          [Legal corpus ingestion CLI (legal.js)]
+                                                │   ├── evals/            [Legal search evaluation suite]
                                                 │   ├── package.json
                                                 │   └── .env.example
-                                                ├── docs/            [Executive Documentation]
+                                                ├── docs/                 [Executive Documentation]
                                                 │   ├── MERGE_AND_INTEGRATION.md
                                                 │   ├── ARCHITECTURE_AND_STRUCTURE.md
                                                 │   └── CHANGELOG.md
                                                 ├── scripts/
-                                                │   └── dev.js       [Monorepo dev orchestrator]
-                                                ├── package.json     [Root scripts: dev:all, etc.]
-                                                ├── .gitignore       [Monorepo git hygiene]
-                                                └── README.md        [Unified project guide]
+                                                │   ├── dev.js            [Monorepo dev orchestrator]
+                                                │   └── start.js          [Production startup orchestrator]
+                                                ├── package.json          [Root scripts: dev:all, start, etc.]
+                                                ├── .env.example          [Root environment template]
+                                                ├── .gitignore            [Monorepo git hygiene]
+                                                └── README.md             [Unified project guide]
 ```
 
 ---
@@ -130,6 +136,8 @@ Nothi-Ai/                                       Nothi-Ai/
 |---|---|---|
 | **Node.js** | `>=22.12.0` | CommonJS server runtime |
 | **Express** | `^4.21.2` | REST API routing, cookie parsing, CORS and CSRF protection |
+| **SQLite (`node:sqlite`)** | Native Node 22 | Native ACID transactions, foreign keys, cascades (`chats.sqlite`) |
+| **Redis (Upstash)** | Lua scripts | Distributed token & query quota reservations via sorted sets/hashes |
 | **Crypto (`node:crypto`)** | Native | `scrypt` password hashing, timing-safe equality checks, session generation |
 | **Tesseract.js & Sharp** | `^6.0.0` / `^0.33.5` | Bengali and English OCR text extraction, image preprocessing, thresholding |
 | **pdfjs-dist** | `^4.10.38` | Multi-page PDF text extraction and layout inspection |
