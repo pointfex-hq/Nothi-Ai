@@ -51,7 +51,7 @@ function finishActivity(ownerId, chatId, activity) {
 }
 
 function resetAttachmentContext(chat) {
-  chat.messages = chat.messages.filter(message => message.mode === 'legal');
+  chat.messages = chat.messages.filter(message => message.mode === 'legal' && !message.hasAttachmentContext);
   chat.updatedAt = Date.now();
   if (chat.messages.length) return;
   const title = Object.values(chat.attachments).filter(Boolean).map(attachment => attachment.name).join(' + ');
@@ -191,14 +191,15 @@ router.post('/:chatId/messages', readJson, async (request, response) => {
     const history = chat.messages.filter(message => (message.mode ?? 'document') === mode);
     const attachments = Object.values(chat.attachments).filter(Boolean);
     const answer = mode === 'legal'
-      ? await answerLegalQuestion(ownerId, question, history)
+      ? await answerLegalQuestion(ownerId, question, history, attachments)
       : await answerChatQuestion(ownerId, question, attachments, history);
     if (!chat.messages.length) {
       chat.title = question.length > 55 ? question.slice(0, 54).trimEnd() + '…' : question;
     }
+    const context = mode === 'legal' && attachments.length ? { hasAttachmentContext: true } : {};
     const messages = [
-      { id: randomUUID(), role: 'user', mode, content: question },
-      { id: randomUUID(), role: 'assistant', mode, ...answer },
+      { id: randomUUID(), role: 'user', mode, ...context, content: question },
+      { id: randomUUID(), role: 'assistant', mode, ...context, ...answer },
     ];
     chat.updatedAt = Date.now();
     chatStore.appendMessages(ownerId, chat, messages);

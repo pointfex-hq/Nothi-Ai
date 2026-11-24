@@ -66,8 +66,9 @@ const deleteChatRow = database.prepare('DELETE FROM chats WHERE owner_id = ? AND
 const insertMessage = database.prepare(`
   INSERT INTO chat_messages (owner_id, chat_id, mode, payload) VALUES (?, ?, ?, ?)
 `);
-const clearDocumentHistory = database.prepare(`
-  DELETE FROM chat_messages WHERE owner_id = ? AND chat_id = ? AND mode = 'document'
+const clearAttachmentHistory = database.prepare(`
+  DELETE FROM chat_messages WHERE owner_id = ? AND chat_id = ?
+    AND (mode = 'document' OR json_extract(payload, '$.hasAttachmentContext') = 1)
 `);
 const upsertAttachment = database.prepare(`
   INSERT INTO chat_attachments (owner_id, chat_id, kind, name, pages) VALUES (?, ?, ?, ?, ?)
@@ -137,7 +138,7 @@ function saveAttachment(ownerId, chat, kind) {
     } else {
       deleteAttachment.run(ownerId, chat.id, kind);
     }
-    clearDocumentHistory.run(ownerId, chat.id);
+    clearAttachmentHistory.run(ownerId, chat.id);
   });
 }
 

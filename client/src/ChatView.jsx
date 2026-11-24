@@ -348,7 +348,10 @@ export default function ChatView({ id, onUpdate }) {
           </div>
         </form>
         <p className="composer-note">
-          {isLegal ? 'Legal search sends your question to Qdrant Cloud and the retrieved passages to OpenRouter.' : (
+          {isLegal ? (
+            <>Legal search sends your question to Qdrant Cloud and retrieved laws to OpenRouter.
+              {hasAttachments && ' OpenRouter also receives the extracted attachment text.'}</>
+          ) : (
             <>
               {hasDocumentMessages ? 'Changing attachments clears answers about your files.' : 'One PDF and one JPG, JPEG, or PNG · Up to 5 MB each'}
               {hasAttachments && ' · Sending a message shares the extracted text with OpenRouter.'}

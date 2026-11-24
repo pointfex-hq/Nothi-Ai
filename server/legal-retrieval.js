@@ -9,10 +9,12 @@ const preferredPassagesPerSection = 2;
 const batchSize = 32;
 const passageBytes = 1600;
 const requiredFields = ['passage', 'lawTitle', 'section', 'jurisdiction', 'officialUrl'];
-const optionalFields = ['version', 'effectiveDate'];
+const versionFields = ['version', 'effectiveDate'];
+const verificationFields = ['retrievedDate', 'amendment', 'amendmentUrl'];
+const optionalFields = [...versionFields, ...verificationFields];
 const sourceFields = [...requiredFields, ...optionalFields];
 const citationFields = [...sourceFields, 'subsection'];
-const searchFields = [...citationFields, 'context', 'fragmentIds'];
+const searchFields = [...citationFields, 'context', 'fragmentIds', 'relatedIds'];
 const sectionFields = ['lawTitle', 'jurisdiction', 'section', 'officialUrl'];
 
 function validOfficialUrl(value) {
@@ -99,8 +101,8 @@ function indexedPoint(id, payload, searchablePassage) {
   };
 }
 
-function clausePoints(source, fingerprint, closingNote) {
-  return clauseGroups(source, closingNote).flatMap(({ subsection, context, text }, groupIndex) => {
+function clausePoints(source, fingerprint, closingNote, retrieveTogether) {
+  const points = clauseGroups(source, closingNote).flatMap(({ subsection, context, text }, groupIndex) => {
     // Reserve embedding space for the actual clause even when its opening language is long.
     const searchableContext = splitPassage(context, passageBytes / 2)[0];
     const bodyLimit = passageBytes - Buffer.byteLength(searchableContext, 'utf8') - 2;
@@ -114,6 +116,14 @@ function clausePoints(source, fingerprint, closingNote) {
       return indexedPoint(fragmentIds[index], payload, combinePassage(searchableContext, fragment));
     });
   });
+  if (retrieveTogether) {
+    if (points.length < 2 || points.length > 4 || points.some(point => !point.payload.subsection || point.payload.fragmentIds)) {
+      throw new RequestError(400, 'Linked retrieval needs two to four short subsections.');
+    }
+    const relatedIds = points.map(point => point.id);
+    for (const point of points) point.payload.relatedIds = relatedIds;
+  }
+  return points;
 }
 
 function pointsFromCorpus(corpus) {
@@ -132,20 +142,23 @@ function pointsFromCorpus(corpus) {
       }
       source[field] = field === 'passage' ? value : value.trim();
     }
-    if (!validOfficialUrl(source.officialUrl)) {
+    if (!validOfficialUrl(source.officialUrl) || (source.amendmentUrl && !validOfficialUrl(source.amendmentUrl))) {
       throw new RequestError(400, `Corpus entry ${index + 1} needs an official HTTP or HTTPS URL.`);
     }
 
-    const { splitByClause, closingNoteStartsWith } = entry;
+    const { splitByClause, closingNoteStartsWith, retrieveTogether } = entry;
     if ((splitByClause !== undefined && typeof splitByClause !== 'boolean') ||
-        (closingNoteStartsWith !== undefined && (!splitByClause || typeof closingNoteStartsWith !== 'string' || !closingNoteStartsWith.trim()))) {
+        (closingNoteStartsWith !== undefined && (!splitByClause || typeof closingNoteStartsWith !== 'string' || !closingNoteStartsWith.trim())) ||
+        (retrieveTogether !== undefined && (typeof retrieveTogether !== 'boolean' || (retrieveTogether && !splitByClause)))) {
       throw new RequestError(400, `Corpus entry ${index + 1} has an invalid clause layout.`);
     }
-    const hash = createHash('sha256').update(JSON.stringify(source));
+    // Source verification can be refreshed without changing any existing point ID.
+    const contentVersion = Object.fromEntries(Object.entries(source).filter(([field]) => !verificationFields.includes(field)));
+    const hash = createHash('sha256').update(JSON.stringify(contentVersion));
     if (splitByClause) hash.update(JSON.stringify(['numbered-clauses-v1', closingNoteStartsWith]));
     const fingerprint = hash.digest('hex');
     const indexed = splitByClause
-      ? clausePoints(source, fingerprint, closingNoteStartsWith)
+      ? clausePoints(source, fingerprint, closingNoteStartsWith, retrieveTogether)
       : splitPassage(source.passage).map((passage, chunkIndex) =>
         indexedPoint(pointId(fingerprint, chunkIndex), { ...source, passage }, passage));
     for (const point of indexed) points.set(point.id, point);
@@ -314,17 +327,21 @@ function parseHit(point) {
   for (const field of citationFields) {
     if (typeof payload[field] === 'string') fields[field] = payload[field];
   }
-  const { fragmentIds, context } = payload;
+  const { fragmentIds, context, relatedIds } = payload;
   if (fragmentIds !== undefined && (!Array.isArray(fragmentIds) || fragmentIds.length < 2 ||
       new Set(fragmentIds).size !== fragmentIds.length || !fragmentIds.every(id => typeof id === 'string') ||
       !fragmentIds.includes(id) || typeof context !== 'string')) return null;
-  return { id, fields, score, context, fragmentIds };
+  if (relatedIds !== undefined && (!Array.isArray(relatedIds) || relatedIds.length < 2 || relatedIds.length > 4 ||
+      new Set(relatedIds).size !== relatedIds.length || !relatedIds.every(id => typeof id === 'string') ||
+      !relatedIds.includes(id) || fragmentIds || !fields.subsection)) return null;
+  return { id, fields, score, context, fragmentIds, relatedIds };
 }
 
 async function assemblePassages(path, candidates) {
   const selected = selectPassages(candidates);
   const byId = new Map(candidates.map(candidate => [candidate.id, candidate]));
-  const missing = [...new Set(selected.flatMap(candidate => candidate.fragmentIds ?? []))].filter(id => !byId.has(id));
+  const missing = [...new Set(selected.flatMap(candidate => candidate.fragmentIds ?? candidate.relatedIds ?? []))]
+    .filter(id => !byId.has(id));
   if (missing.length) {
     const points = await qdrantRequest(path + '/points', {
       method: 'POST', body: { ids: missing, with_payload: searchFields, with_vector: false },
@@ -336,7 +353,18 @@ async function assemblePassages(path, candidates) {
     }
   }
 
-  return selected.flatMap(({ fields, score, fragmentIds, context }) => {
+  const withRelated = new Map(selected.map(point => [point.id, point]));
+  for (const { fields, relatedIds } of selected) {
+    for (const id of relatedIds ?? []) {
+      const related = byId.get(id);
+      if (related && JSON.stringify(related.relatedIds) === JSON.stringify(relatedIds) &&
+          [...sectionFields, ...versionFields].every(field => related.fields[field] === fields[field])) {
+        withRelated.set(id, related);
+      }
+    }
+  }
+
+  return [...withRelated.values()].flatMap(({ fields, score, fragmentIds, context }) => {
     if (!fragmentIds) return [{ score, ...fields }];
     const fragments = fragmentIds.map(id => byId.get(id));
     const sameGroup = fragments.every(fragment => fragment && fragment.context === context &&

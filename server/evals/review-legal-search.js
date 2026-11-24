@@ -1,7 +1,7 @@
 const { readFileSync } = require('node:fs');
 const suite = require('./legal-search.json');
 
-const trackedScenarios = ['sale-and-contract', 'lease-notice-outside-corpus'];
+const trackedScenarios = ['sale-and-contract', 'contract-effect-and-registration', 'registration-missing-execution-date', 'lease-notice-outside-corpus'];
 
 function answerProse(content) {
   return content.replace(/\[(?:\\.|[^\]\\])*\]\(#source-\d+\)/gu, '').normalize('NFC');
@@ -51,11 +51,27 @@ function reviewLegalResult(row) {
   }
 
   checks.complete = type === 'generated answer' && row.provider?.some(call => call.finish === 'stop');
-  checks.mixedPriceMentioned = mentionsMixedPrice(prose, row.language);
+  if (scenario.id === 'sale-and-contract') {
+    checks.mixedPriceMentioned = mentionsMixedPrice(prose, row.language);
+  } else {
+    checks.currentPeriodMentioned = row.language === 'bn'
+      ? /(?:৬০|60|ষাট)\s*দিন/u.test(prose)
+      : /\b(?:60|sixty)[\s-]+days?\b/iu.test(prose);
+    if (scenario.expectedFollowUp) {
+      const questions = prose.split(/\r?\n/u).filter(line => line.includes('?'));
+      checks.focusedFollowUp = (prose.match(/\?/gu) ?? []).length === 1 &&
+        (row.language === 'bn' ? /সম্পাদন|স্বাক্ষর/u : /execut|sign/iu).test(questions[0]);
+      checks.attachmentCitation = citations.some(citation => citation.kind === 'pdf' &&
+        citation.label === `${scenario.expectedAttachment.filename}, p. ${scenario.expectedAttachment.pageNumber}` &&
+        citation.pageNumber === scenario.expectedAttachment.pageNumber);
+    }
+  }
   checks.expectedCitations = scenario.claims.every(claim => citations.some(citation =>
-    citation.matchesSuppliedSource && citation.section === claim.section && citation.officialUrl === suite.sources[claim.section]));
+    citation.matchesSuppliedSource && citation.section === claim.section && citation.officialUrl === suite.sources[claim.section] &&
+    (!claim.subsection || citation.subsection === claim.subsection)));
   if (Object.values(checks).every(Boolean)) result.verdict = 'needs claim review';
   result.requiredClaimReview = scenario.claims.map(({ statement, requiredAnswerElements = [] }) => ({ statement, requiredAnswerElements }));
+  if (scenario.expectedFollowUp) result.requiredFollowUpReview = scenario.expectedFollowUp;
   return result;
 }
 

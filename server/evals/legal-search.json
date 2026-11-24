@@ -1,6 +1,6 @@
 {
   "title": "Nothi AI Legal search bilingual evaluation",
-  "lawTitle": "The Transfer of Property Act, 1882",
+  "lawTitles": ["The Transfer of Property Act, 1882", "The Registration Act, 1908"],
   "jurisdiction": "Bangladesh",
   "maxOutputTokens": 500,
   "expectedAnswerLanguage": "Match the question language, including abstentions. For Bangla, check the prose for stray words in unrelated languages. Exclude the app's official citation labels from that check.",
@@ -10,12 +10,14 @@
     "7",
     "8",
     "9",
+    "17A",
     "54",
     "54A",
     "55"
   ],
   "sources": {
     "9": "https://bdlaws.minlaw.gov.bd/act-48/section-25421.html",
+    "17A": "https://bdlaws.minlaw.gov.bd/act-90/section-22918.html",
     "54": "https://bdlaws.minlaw.gov.bd/act-48/act-chapter-print-162.html",
     "55": "https://bdlaws.minlaw.gov.bd/act-48/section-16096.html",
     "54A": "https://bdlaws.minlaw.gov.bd/act-48/section-16095.html"
@@ -80,6 +82,49 @@
             "instrument in writing and registered",
             "whether or not the transferee has taken possession"
           ]
+        }
+      ]
+    },
+    {
+      "id": "contract-effect-and-registration",
+      "questions": {
+        "en": "Does a contract for sale of immovable property transfer ownership, and how soon must it be presented for registration after execution?",
+        "bn": "স্থাবর সম্পত্তির বিক্রয়ের চুক্তি কি মালিকানা হস্তান্তর করে, আর সম্পাদনের কত দিনের মধ্যে চুক্তিটি নিবন্ধনের জন্য উপস্থাপন করতে হয়?"
+      },
+      "expected": "answer",
+      "passCriteria": "Lead with the answer. Distinguish a contract for a future sale from a completed sale, and cite Section 54 for the difference. Cite current Section 17A(2) for presenting the contract within 60 days of execution. Keep Section 54A's separate sale-deed timing distinct. A general question needs no follow-up.",
+      "claims": [
+        {
+          "id": "contract-effect-versus-sale",
+          "section": "54",
+          "statement": "A sale transfers ownership. The contract for sale is an agreement to sell on settled terms and does not itself transfer ownership or create an interest or charge.",
+          "evidenceContains": ["transfer of ownership", "terms settled", "create any interest in or charge"]
+        },
+        {
+          "id": "contract-presentation-period",
+          "section": "17A",
+          "subsection": "17A(2)",
+          "statement": "Under the current rule, the contract must be presented for registration within 60 days from execution.",
+          "evidenceContains": ["presented for registration", "sixty days", "from the date of execution"]
+        }
+      ]
+    },
+    {
+      "id": "registration-missing-execution-date",
+      "questions": {
+        "en": "The attached contract is for the sale of immovable property. What is the last day I can present it for registration?",
+        "bn": "সংযুক্ত চুক্তিটি স্থাবর সম্পত্তি বিক্রয়ের জন্য। নিবন্ধনের জন্য এটি উপস্থাপন করার শেষ দিন কবে?"
+      },
+      "expected": "answer",
+      "expectedAttachment": { "filename": "fictional-sale-agreement.pdf", "pageNumber": 1 },
+      "expectedFollowUp": "Ask exactly one question about the execution date, and give no invented calendar deadline. Cite the attachment page separately if using a fact from it.",
+      "claims": [
+        {
+          "id": "contract-presentation-period",
+          "section": "17A",
+          "subsection": "17A(2)",
+          "statement": "Give the current 60-day period from execution. The calendar deadline and applicable version cannot be determined from a contract with no execution date.",
+          "evidenceContains": ["presented for registration", "sixty days", "from the date of execution"]
         }
       ]
     },
