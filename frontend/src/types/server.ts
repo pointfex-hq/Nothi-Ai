@@ -7,9 +7,10 @@ export interface ServerUser {
   username: string;
   name?: string;
   role: 'admin' | 'user';
-  status?: 'active' | 'suspended';
+  status?: 'active' | 'suspended' | 'banned';
   createdAt?: number;
   isEnvAccount?: boolean;
+  isSuperAdmin?: boolean;
 }
 
 export interface ServerChatSummary {
@@ -83,15 +84,44 @@ export interface ServerAdminUser {
   email: string;
   name?: string;
   role: 'admin' | 'user';
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'banned';
   createdAt: number;
   isEnvAccount?: boolean;
+  isSuperAdmin: boolean;
   chatCount: number;
+  usage: ServerUserUsage;
+}
+
+export interface ServerUserUsage {
+  questionsUsed: number;
+  questionsLimit: number;
+  tokensUsed: number;
+  tokensLimit: number;
+  resetAt: string;
+}
+
+export interface ServerAccessEvent {
+  id: string;
+  userId: string;
+  username: string;
+  event: 'REGISTERED' | 'LOGIN';
+  timestamp: number;
+}
+
+export interface ServerAccessLogPage {
+  entries: ServerAccessEvent[];
+  total: number;
+}
+
+export interface ServerLegalCollectionStatus {
+  collection: string;
+  exists: boolean;
+  points: number;
 }
 
 export interface ServerAuditLog {
   id: string;
-  action: 'USER_SUSPENDED' | 'USER_REACTIVATED' | 'USER_DELETED' | 'QUOTA_UPDATED';
+  action: 'USER_SUSPENDED' | 'USER_BANNED' | 'USER_REACTIVATED' | 'USER_DELETED' | 'QUOTA_UPDATED' | 'RAG_INGESTED';
   adminId: string;
   targetId?: string | null;
   details?: string;

@@ -267,7 +267,7 @@ export function FiveStagesFlow({ stages }: FiveStagesFlowProps) {
       icon: '📜',
       srs: 'FR-4.1',
       pill: 'Corpus Filter',
-      liveStat: 'Grounded: 28 Verified Statutory Sections',
+      liveStat: 'Grounded: verified statutory sources',
     },
     {
       x: 1090,

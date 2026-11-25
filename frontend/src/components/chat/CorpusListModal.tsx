@@ -4,6 +4,9 @@ import { useEffect, useRef } from 'react';
 import corpusData from '@/data/laws_corpus.json';
 import type { CorpusSection } from '@/types';
 
+const corpusSections = corpusData as CorpusSection[];
+const verifiedCount = corpusSections.filter(section => section.version.startsWith('verified-') && !section.text.startsWith('PLACEHOLDER')).length;
+
 interface CorpusListModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -26,7 +29,7 @@ export function CorpusListModal({ isOpen, onClose, onSelectSection }: CorpusList
 
   // Group sections by Act
   const actsMap: Record<string, CorpusSection[]> = {};
-  (corpusData as CorpusSection[]).forEach((sec) => {
+  corpusSections.forEach((sec) => {
     if (!actsMap[sec.act]) actsMap[sec.act] = [];
     actsMap[sec.act].push(sec);
   });
@@ -48,10 +51,10 @@ export function CorpusListModal({ isOpen, onClose, onSelectSection }: CorpusList
         <div className="p-5 border-b border-border bg-paper-light flex items-center justify-between shrink-0">
           <div>
             <div className="text-[11px] font-mono text-ink-muted uppercase tracking-wider">
-              Statutory Boundary • 28 Sections
+              Statutory Sources • {verifiedCount} verified / {corpusSections.length} cataloged
             </div>
             <h2 id="corpus-modal-title" className="font-heading text-xl font-bold text-green-deep">
-              Verified Statutory Corpus
+              Legal Source Catalog
             </h2>
           </div>
           <button
@@ -68,7 +71,7 @@ export function CorpusListModal({ isOpen, onClose, onSelectSection }: CorpusList
         <div className="px-5 py-3 bg-paper-dark/50 border-b border-border text-xs font-sans text-ink-muted flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-green-deep shrink-0" />
           <span>
-            Nothi AI strictly rejects unverified topics. Only answers grounded in these 28 statutory sections are delivered.
+            Placeholder entries are unverified and excluded from citation checks. Only entries marked verified are eligible as statutory sources.
           </span>
         </div>
 
@@ -85,7 +88,7 @@ export function CorpusListModal({ isOpen, onClose, onSelectSection }: CorpusList
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {sections.map((sec) => {
-                  const isVerified = sec.version === 'verified-v1' && !sec.text.startsWith('PLACEHOLDER');
+                  const isVerified = sec.version.startsWith('verified-') && !sec.text.startsWith('PLACEHOLDER');
 
                   return (
                     <button

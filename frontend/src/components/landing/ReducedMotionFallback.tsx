@@ -56,7 +56,7 @@ export function ReducedMotionFallback({ currentStep, packet = 'B' }: FallbackPro
                 : 'bg-green-deep/10 text-green-deep border border-green-deep/30'
             }`}
           >
-            {packet === 'B' ? '▲ Reg Lag: 135 Days (> 4 Months Limit)' : '✓ Reg Lag: 28 Days (Compliant)'}
+            {packet === 'B' ? '▲ Late presentation: Section 25 review' : '✓ Presented within ordinary 3 months'}
           </div>
         </div>
 

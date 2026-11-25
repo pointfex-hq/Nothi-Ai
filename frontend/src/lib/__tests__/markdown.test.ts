@@ -24,7 +24,7 @@ describe('Markdown Utilities & File Structure Generation', () => {
     expect(hasMarkdownStructure('| Section | Act | Status |\n|---|---|---|\n| Sec 23 | Reg Act | Valid |')).toBe(true);
 
     // Checklists
-    expect(hasMarkdownStructure('- [ ] Verify 4-month presentation deadline')).toBe(true);
+    expect(hasMarkdownStructure('- [ ] Verify 3-month ordinary presentation deadline')).toBe(true);
     expect(hasMarkdownStructure('- [x] NID 10-digit format verified')).toBe(true);
 
     // Plain text without structure
@@ -111,9 +111,9 @@ End of memo.
 
     const verified = filterValidCitations(candidates);
 
-    // Fabricated ID must be stripped; only the 2 verified sections remain
-    expect(verified).toHaveLength(2);
-    expect(verified.map((c) => c.id)).toEqual(['reg_act_1908_s23', 'tpa_1882_s54']);
+    // Placeholder and fabricated IDs must be stripped.
+    expect(verified).toHaveLength(1);
+    expect(verified.map((c) => c.id)).toEqual(['reg_act_1908_s23']);
     expect(verified.some((c) => c.id === 'fake_hallucinated_section_999')).toBe(false);
   });
 });

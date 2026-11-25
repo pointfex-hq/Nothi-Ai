@@ -3,6 +3,11 @@ const RequestError = require('./request-error');
 
 let client;
 let connecting;
+const readDailyQuota = `
+  local values = redis.call('HMGET', KEYS[1], 'resetAt', 'questions', 'tokens')
+  if tonumber(values[1]) ~= tonumber(ARGV[1]) then return { 0, 0 } end
+  return { tonumber(values[2]) or 0, tonumber(values[3]) or 0 }
+`;
 
 async function runQuotaScript(script, keys, args) {
   try {
@@ -27,4 +32,9 @@ async function runQuotaScript(script, keys, args) {
   }
 }
 
-module.exports = { runQuotaScript };
+async function getDailyQuota(userId, resetAt) {
+  const key = 'nothi:ask:v1:{' + userId + '}:day';
+  return runQuotaScript(readDailyQuota, [key], [resetAt]);
+}
+
+module.exports = { runQuotaScript, getDailyQuota };

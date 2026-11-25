@@ -42,6 +42,14 @@ database.exec(`
     PRIMARY KEY (owner_id, chat_id, kind),
     FOREIGN KEY (owner_id, chat_id) REFERENCES chats(owner_id, id) ON DELETE CASCADE
   ) STRICT;
+  CREATE TABLE IF NOT EXISTS access_events (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    event TEXT NOT NULL CHECK (event IN ('REGISTERED', 'LOGIN')),
+    timestamp INTEGER NOT NULL
+  ) STRICT;
+  CREATE INDEX IF NOT EXISTS access_events_recent ON access_events(timestamp DESC);
 `);
 
 const selectList = database.prepare(`
@@ -84,6 +92,14 @@ const upsertAttachment = database.prepare(`
 const deleteAttachment = database.prepare(`
   DELETE FROM chat_attachments WHERE owner_id = ? AND chat_id = ? AND kind = ?
 `);
+const insertAccessEvent = database.prepare(`
+  INSERT INTO access_events (id, user_id, username, event, timestamp) VALUES (?, ?, ?, ?, ?)
+`);
+const selectAccessEvents = database.prepare(`
+  SELECT id, user_id AS userId, username, event, timestamp
+  FROM access_events ORDER BY timestamp DESC, rowid DESC LIMIT ? OFFSET ?
+`);
+const countAccessEvents = database.prepare('SELECT COUNT(*) AS count FROM access_events');
 
 function missingChat() {
   return new RequestError(404, 'This chat is no longer available.');
@@ -244,6 +260,21 @@ function getUserChatCount(ownerId) {
   return row ? row.count : 0;
 }
 
+function recordAccessEvent({ userId, username, event, timestamp = Date.now() }) {
+  const entry = { id: randomUUID(), userId, username, event, timestamp };
+  insertAccessEvent.run(entry.id, userId, username, event, timestamp);
+  return entry;
+}
+
+function listAccessEvents(limit = 50, offset = 0) {
+  const safeLimit = Number.isFinite(limit) ? Math.max(1, Math.min(100, Math.floor(limit))) : 50;
+  const safeOffset = Number.isFinite(offset) ? Math.max(0, Math.floor(offset)) : 0;
+  return {
+    entries: selectAccessEvents.all(safeLimit, safeOffset),
+    total: countAccessEvents.get().count,
+  };
+}
+
 function findChatGlobally(chatId) {
   const row = findChatAnyOwner.get(chatId);
   if (row) {
@@ -262,6 +293,8 @@ module.exports = {
   deleteChat,
   deleteUserChats,
   getUserChatCount,
+  recordAccessEvent,
+  listAccessEvents,
   findChatGlobally,
   updateFullChat,
 };

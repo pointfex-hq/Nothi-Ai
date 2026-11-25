@@ -4,9 +4,9 @@ const router = express.Router();
 
 /**
  * Deterministic Statutory Reasoning Engine for Nothi AI Chat
- * Evaluates queries against the 28 verified sections of Bangladeshi land law.
+ * Answers supported queries from the currently verified local legal sources.
  */
-function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
+function generateStatutoryResponseBase(prompt, lang = 'en', attachments = []) {
   const isBangla = lang === 'bn' || /[\u0980-\u09FF]/.test(prompt);
   const lower = prompt.toLowerCase().trim();
   const hasAttachments = attachments && attachments.length > 0;
@@ -88,7 +88,7 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
     };
   }
 
-  // 5. DEED PRESENTATION TIMELINE / 4-MONTH RULE
+  // 5. DEED PRESENTATION TIMELINE / SECTION 23 AND SECTION 25 EXCEPTION
   if (
     lower.includes('signing and registering') ||
     lower.includes('how long') ||
@@ -104,8 +104,8 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
   ) {
     return {
       content: isBangla
-        ? `রেজিস্ট্রেশন আইন, ১৯০৮ এর **ধারা ২৩** অনুযায়ী, উইল ব্যতীত স্থাবর সম্পত্তির যেকোনো দলিল সম্পাদনের (স্বাক্ষরের) তারিখ থেকে **সর্বোচ্চ ৪ (চার) মাসের** মধ্যে উপযুক্ত নিবন্ধন কর্মকর্তার নিকট দাখিলের জন্য উপস্থাপন করতে হবে।\n\n• **বিলম্ব মওকুফ (ধারা ২৪ ও ২৫):** যদি অনিবার্য দুর্ঘটনা বা জরুরি প্রয়োজনের কারণে ৪ মাসের মধ্যে দাখিল করা সম্ভব না হয়, তবে রেজিস্ট্রার অতিরিক্ত ৪ মাসের মধ্যে তা গ্রহণের অনুমতি দিতে পারেন (সর্বোচ্চ রেজিস্ট্রেশন ফি-র ১০ গুণ জরিমানা সাপেক্ষে)।\n• **সময় অতিক্রান্তের ফল:** এই বিধিবদ্ধ সময়সীমা অতিক্রান্ত হলে সংশ্লিষ্ট দলিলটি আইনগতভাবে সাব-রেজিস্ট্রার অফিসে গ্রহণযোগ্য হবে না।`
-        : `Under **Section 23 of the Registration Act, 1908**, no document other than a will shall be accepted for registration unless presented for that purpose within **four months** from the date of its execution.\n\n• **Unavoidable Delay (Sections 24 & 25):** Where delay in presentation is caused by urgent necessity or unavoidable accident, the Registrar may direct that on payment of a fine (not exceeding 10 times the registration fee), the document be accepted within an additional period not exceeding four months.\n• **Consequence of Non-Compliance:** Failure to present the document within this strict statutory execution-to-presentation window results in outright rejection by the registering officer.`,
+        ? `রেজিস্ট্রেশন আইন, ১৯০৮ এর **ধারা ২৩** অনুযায়ী, উইল ব্যতীত দলিল সম্পাদনের তারিখ থেকে সাধারণত **৩ (তিন) মাসের** মধ্যে উপযুক্ত নিবন্ধন কর্মকর্তার কাছে উপস্থাপন করতে হয়।\n\n• **ধারা ২৪:** একাধিক ব্যক্তি ভিন্ন সময়ে দলিল সম্পাদন করলে প্রত্যেকের সম্পাদনের তারিখ থেকে সময় গণনা হয়।\n• **ধারা ২৫-এর ব্যতিক্রম:** জরুরি প্রয়োজন বা অনিবার্য দুর্ঘটনায় নির্ধারিত সময়ের পর বিলম্ব ৪ মাসের বেশি না হলে নিবন্ধক সর্বোচ্চ ১০ গুণ নিবন্ধন ফি জরিমানা নিয়ে দলিল গ্রহণের নির্দেশ দিতে পারেন। এটি স্বয়ংক্রিয় নয়; অনুমতির প্রমাণ যাচাই করতে হবে।`
+        : `Under **Section 23 of the Registration Act, 1908**, a document other than a will must ordinarily be presented within **three months** of execution.\n\n• **Section 24:** When multiple persons execute at different times, the period runs from each person's execution date.\n• **Section 25 exception:** For urgent necessity or unavoidable accident, the Registrar may direct acceptance if the delay beyond the prescribed period does not exceed four months, subject to a fine of up to ten times the registration fee. This is not automatic; verify that permission was granted.`,
       citations: [
         { id: 'reg_act_1908_s23', act: 'Registration Act, 1908', section: 'Section 23' },
         { id: 'reg_act_1908_s24', act: 'Registration Act, 1908', section: 'Section 24' },
@@ -211,8 +211,8 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
   ) {
     return {
       content: isBangla
-        ? `আসসালামু আলাইকুম! আমি **নথি এআই (Nothi AI)**—বাংলাদেশ ভূমি ও সম্পত্তি আইনের ২৮টি যাচাইকৃত ধারার ওপর ভিত্তি করে তৈরি ডিজিটাল দলিল নিরীক্ষক।\n\nআমি আপনাকে দলিল রেজিস্ট্রেশনের ৪ মাসের সময়সীমা (ধারা ২৩), খতিয়ান ও দাগ নম্বর যাচাই (ধারা ৫৪), এবং এনআইডি কাঠামোগত বৈধতা (বিধি ৩) পরীক্ষায় সহায়তা করতে পারি।`
-        : `Hello! I am **Nothi AI (নথি এআই)**—a deterministic statutory vetting assistant strictly grounded in 28 verified sections of Bangladeshi property law.\n\nI can verify deed presentation windows (Section 23), Dag/plot parity (Section 54), compulsory registrations (Section 17), and National ID formats (Rule 3).`,
+        ? `আসসালামু আলাইকুম! আমি **নথি এআই (Nothi AI)**—বাংলাদেশ ভূমি ও সম্পত্তি আইনের যাচাইকৃত উৎসভিত্তিক সহকারী।\n\nআমি দলিল উপস্থাপনের সাধারণ ৩ মাসের সময়সীমা ও ধারা ২৫-এর ব্যতিক্রম, খতিয়ান ও দাগ নম্বর, এবং এনআইডি কাঠামোগত নিয়ম সম্পর্কে তথ্য দিতে পারি।`
+        : `Hello! I am **Nothi AI (নথি এআই)**—a statutory assistant grounded in the verified legal sources currently available in the corpus.\n\nI can explain the ordinary three-month presentation period and Section 25 exception, Dag/plot rules, compulsory registration, and National ID formats.`,
       citations: [
         { id: 'reg_act_1908_s17', act: 'Registration Act, 1908', section: 'Section 17' },
         { id: 'reg_act_1908_s23', act: 'Registration Act, 1908', section: 'Section 23' },
@@ -223,10 +223,48 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
   // 11. OUT-OF-CORPUS INQUIRY REFUSAL (Zero Fabrication)
   return {
     content: isBangla
-      ? `দুঃখিত, আমি আমাদের যাচাইকৃত সংবিধিবদ্ধ আইনে এই নির্দিষ্ট অনুসন্ধানের বিষয়ে সংবিধিবদ্ধ রেফারেন্স খুঁজে পাচ্ছি না (cannot find this specific inquiry in our verified statutory corpus)। আইনগত অসত্য তথ্য তৈরি প্রতিরোধে নথি এআই শুধুমাত্র যাচাইকৃত ২৮টি ধারার ভিত্তিতে উত্তর প্রদান করে থাকে।`
-      : `I cannot find this specific inquiry in our verified statutory corpus. Nothi AI strictly adheres to deterministic verification against verified statutory sections of Bangladeshi property law and refuses to fabricate ungrounded legal rules.`,
+      ? `দুঃখিত, বর্তমানে যাচাইকৃত আইনি উৎসে এই নির্দিষ্ট প্রশ্নের সমর্থন খুঁজে পাচ্ছি না। যাচাইহীন বিধান তৈরি না করে নথি এআই অনিশ্চিত বিষয়ে উত্তর দেওয়া থেকে বিরত থাকে।`
+      : `I cannot find support for this specific question in the currently verified legal sources. Nothi AI abstains rather than inventing an unverified rule.`,
     citations: [],
   };
+}
+
+function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
+  const isBangla = lang === 'bn' || /[\u0980-\u09FF]/.test(prompt);
+  if (Array.isArray(attachments) && attachments.length) {
+    return {
+      content: isBangla
+        ? 'এই স্ট্যাটিউটরি মোড সংযুক্ত নথির বিষয়বস্তু পরীক্ষা করে না; শুধু ফাইলের নাম দেখে কোনো যাচাই করা হয়নি। নথির লেখা সম্পর্কে প্রশ্ন করতে Document Q&A ব্যবহার করুন।'
+        : 'Statutory mode does not inspect attached document contents; no file verification was performed. Use Document Q&A for questions about extracted document text.',
+      citations: [],
+    };
+  }
+
+  const result = generateStatutoryResponseBase(prompt, lang);
+  const replacements = isBangla
+    ? [
+      [/৪ মাসের দাখিল সময়সীমা/gu, 'সাধারণ ৩ মাসের উপস্থাপন সময়সীমা'],
+      [/ধারা ২৩ মতে ৪ মাসের/gu, 'ধারা ২৩ মতে সাধারণ ৩ মাসের'],
+      [/ধারা ২৩ অনুযায়ী ৪ মাসের/gu, 'ধারা ২৩ অনুযায়ী সাধারণ ৩ মাসের'],
+      [/৪ মাসের বাধ্যতামূলক সময়সীমা/gu, 'সাধারণ ৩ মাসের সময়সীমা'],
+      [/৪-মাসের সীমার মধ্যে/gu, 'সাধারণ ৩-মাসের সময়সীমার মধ্যে'],
+      [/৪ মাসের সময়সীমা \(ধারা ২৩\)/gu, 'সাধারণ ৩ মাসের সময়সীমা (ধারা ২৩)'],
+      [/(ধারা ২৩[^\n]{0,80})৪ মাসের মধ্যে/gu, '$1সাধারণ ৩ মাসের মধ্যে'],
+    ]
+    : [
+      [/4-month statutory (?:execution )?(?:window|deadline)/giu, 'ordinary 3-month presentation period'],
+      [/4-month presentation window/giu, 'ordinary 3-month presentation period'],
+      [/4-month limit (?:prescribed by|under) Section 23/giu, 'ordinary 3-month period under Section 23'],
+      [/within 4 months per Section 23/giu, 'within three months per Section 23'],
+      [/within four months per Section 23/giu, 'within three months per Section 23'],
+      [/within statutory 4 months/giu, 'within the ordinary statutory three-month period'],
+      [/four months from the date of its execution/giu, 'three months from the date of its execution'],
+      [/four months per Section 23/giu, 'three months per Section 23'],
+      [/28 verified (?:sections|statutory sections)/giu, 'currently verified legal sources'],
+    ];
+  let content = result.content;
+  for (const [pattern, replacement] of replacements) content = content.replace(pattern, replacement);
+  return { ...result, content };
 }
 
 router.post('/', express.json({ limit: '2mb' }), (req, res) => {

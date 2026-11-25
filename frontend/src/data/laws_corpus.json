@@ -12,24 +12,24 @@
     "act": "Registration Act, 1908",
     "section": "Section 23",
     "title": "Time for presenting documents",
-    "text": "Subject to the provisions contained in sections 24, 25 and 26, no document other than a will shall be accepted for registration unless presented for that purpose to the proper officer within four months from the date of its execution.",
-    "version": "verified-v1"
+    "text": "Subject to the provisions contained in sections 24, 25 and 26, no document other than a will shall be accepted for registration unless presented for that purpose to the proper officer within three months from the date of its execution. A copy of a decree or order may be presented within three months from the day on which it was made, or, where it is appealable, within three months from the day on which it becomes final.",
+    "version": "verified-v2"
   },
   {
     "id": "reg_act_1908_s24",
     "act": "Registration Act, 1908",
     "section": "Section 24",
     "title": "Documents executed by several persons at different times",
-    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 24 addresses situations where a document is executed by several persons at different times.",
-    "version": "placeholder-v1"
+    "text": "Where there are several persons executing a document at different times, such document may be presented for registration and re-registration within four months from the date of each execution.",
+    "version": "verified-v2"
   },
   {
     "id": "reg_act_1908_s25",
     "act": "Registration Act, 1908",
     "section": "Section 25",
     "title": "Provision where delay in presentation is unavoidable",
-    "text": "PLACEHOLDER: replace with verified text from laws_corpus.json (28 sections). Section 25 provides for cases where delay in presentation is caused by urgent necessity or unavoidable accident.",
-    "version": "placeholder-v1"
+    "text": "(1) If, owing to urgent necessity or unavoidable accident, any document executed, or copy of a decree or order made, in Bangladesh is not presented for registration till after the expiration of the time hereinbefore prescribed in that behalf, the Registrar, in cases where the delay in presentation does not exceed four months, may direct that, on payment of a fine not exceeding ten times the amount of the proper registration-fee, such document shall be accepted for registration. (2) Any application for such direction may be lodged with a Sub-Registrar, who shall forthwith forward it to the Registrar to whom he is subordinate.",
+    "version": "verified-v2"
   },
   {
     "id": "tpa_1882_s54",

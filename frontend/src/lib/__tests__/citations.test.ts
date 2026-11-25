@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { filterValidCitations, isValidCitationId, getCorpusSectionById } from '@/lib/citations';
+import { filterValidCitations, isValidCitationId, getCorpusSectionById, getVerifiedCorpusSections } from '@/lib/citations';
 import type { Citation } from '@/types';
 
 describe('Citation Filter', () => {
@@ -72,10 +72,17 @@ describe('Citation Filter', () => {
     expect(result).toHaveLength(0);
   });
 
-  it('isValidCitationId returns true for known IDs', () => {
+  it('only treats source-verified entries as citation-eligible', () => {
     expect(isValidCitationId('reg_act_1908_s23')).toBe(true);
-    expect(isValidCitationId('nidw_rules_r3')).toBe(true);
-    expect(isValidCitationId('tpa_1882_s54')).toBe(true);
+    expect(isValidCitationId('reg_act_1908_s24')).toBe(true);
+    expect(isValidCitationId('reg_act_1908_s25')).toBe(true);
+    expect(isValidCitationId('nidw_rules_r3')).toBe(false);
+    expect(isValidCitationId('tpa_1882_s54')).toBe(false);
+    expect(getVerifiedCorpusSections().map(section => section.id)).toEqual([
+      'reg_act_1908_s23',
+      'reg_act_1908_s24',
+      'reg_act_1908_s25',
+    ]);
   });
 
   it('isValidCitationId returns false for unknown IDs', () => {
@@ -88,8 +95,8 @@ describe('Citation Filter', () => {
     expect(section).toBeDefined();
     expect(section!.act).toBe('Registration Act, 1908');
     expect(section!.section).toBe('Section 23');
-    expect(section!.text).toContain('four months');
-    expect(section!.version).toBe('verified-v1');
+    expect(section!.text).toContain('three months');
+    expect(section!.version).toBe('verified-v2');
   });
 
   it('getCorpusSectionById returns undefined for unknown IDs', () => {
@@ -97,7 +104,7 @@ describe('Citation Filter', () => {
     expect(section).toBeUndefined();
   });
 
-  it('runs the 4 sample demonstration citations through the filter expecting 3 verified and 1 stripped', () => {
+  it('strips citations whose corpus entries are placeholders', () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     const sampleCitations: Citation[] = [
@@ -128,12 +135,8 @@ describe('Citation Filter', () => {
     ];
 
     const result = filterValidCitations(sampleCitations);
-    expect(result).toHaveLength(3);
-    expect(result.map((c) => c.id)).toEqual([
-      'reg_1908_sec23',
-      'tp_1882_sec52',
-      'land_crime_2023_sec4',
-    ]);
+    expect(result).toHaveLength(1);
+    expect(result.map((c) => c.id)).toEqual(['reg_1908_sec23']);
 
     // Expect the fake citation to have been logged and stripped
     expect(warnSpy).toHaveBeenCalledWith(
