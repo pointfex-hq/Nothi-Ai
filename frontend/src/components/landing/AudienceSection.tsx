@@ -13,9 +13,9 @@ export function AudienceSection() {
       titleEn: 'Chain of Title & Statutory Execution Windows',
       titleBn: 'মালিকানার ধারাবাহিকতা ও সংবিধিবদ্ধ সময়সীমা',
       descEn:
-        'Eliminate manual cross-checking between deed recitals and collectorate record books. Nothi AI instantly detects schedule Dag mismatches and verifies whether the Saf Kabala deed was presented within the strict 4-month statutory deadline under Section 23 of the Registration Act, 1908.',
+        'Eliminate manual cross-checking between deed recitals and collectorate record books. Nothi AI instantly detects schedule Dag mismatches and checks whether the Saf Kabala deed was ordinarily presented within three months under Section 23 of the Registration Act, 1908.',
       descBn:
-        'দলিলের বিবরণ ও কালেক্টরেট রেকর্ডের মধ্যে ম্যানুয়াল মিল খোঁজার জটিলতা দূর করুন। নথি এআই তাত্ক্ষণিকভাবে তফসিলে দাগের গরমিল শনাক্ত করে এবং রেজিস্ট্রেশন আইন ১৯০৮ এর ধারা ২৩ অনুযায়ী ৪ মাসের বাধ্যতামূলক সময়সীমা মানা হয়েছে কি না তা যাচাই করে।',
+        'দলিলের বিবরণ ও কালেক্টরেট রেকর্ডের মধ্যে ম্যানুয়াল মিল খোঁজার জটিলতা দূর করুন। নথি এআই তফসিলে দাগের গরমিল শনাক্ত করে এবং রেজিস্ট্রেশন আইন ১৯০৮ এর ধারা ২৩ অনুযায়ী সাধারণ ৩ মাসের সময়সীমা পরীক্ষা করে।',
       statutoryKey: 'Registration Act 1908 (Sec. 23 & 28)',
     },
     {
@@ -107,7 +107,7 @@ export function AudienceSection() {
             <p className="text-xs text-ink-muted font-sans">
               {lang === 'bn'
                 ? '২৮টি সংবিধিবদ্ধ ধারার ভিত্তিতে তাৎক্ষণিক উত্তর পান।'
-                : 'Answers grounded strictly in 28 verified sections of Bangladeshi property law.'}
+                : 'Answers grounded strictly in the verified Bangladeshi property-law sources currently available.'}
             </p>
           </div>
           <Link

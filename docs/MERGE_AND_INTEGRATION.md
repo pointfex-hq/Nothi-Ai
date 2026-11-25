@@ -70,7 +70,7 @@ Previously, two runtime mock modules in `frontend/src/mocks/` bypassed the backe
 
 ### Live Endpoints Implemented in `backend/`:
 1. **`POST /api/chat` (`backend/chat-statutory.js`)**:
-   - Implements the live statutory analysis engine grounded in the 28 verified sections of Bangladeshi property law (`laws_corpus.json`).
+   - Implements the live statutory analysis engine grounded in source-verified entries from Bangladeshi property law (`laws_corpus.json`).
    - Evaluates deed presentation timelines under Section 23 of the Registration Act 1908, compulsory registrations under Section 17, schedule plot parity under Section 54 of the Transfer of Property Act 1882, and 10-digit format compliance under Rule 3 of the NID Registration Rules 2010.
    - Refuses out-of-corpus topics (e.g., corporate tax, non-land topics) without hallucinating statutory law.
 2. **`POST /api/audit/run` & `POST /api/audit/upload` (`backend/audit.js`)**:

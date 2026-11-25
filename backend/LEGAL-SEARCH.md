@@ -31,6 +31,8 @@ Omit unavailable optional fields. Keep a local corpus under the Git-ignored `bac
 
 An administrator can also open `/admin/settings` and upload a JSON or JSON Lines corpus to seed the configured Qdrant collection. The ingestion validates required source metadata and rejects placeholder passage text. The bundled frontend citation catalog is not an approved RAG corpus.
 
+The repository includes a small, official-text starter seed for Registration Act Sections 23–25. Section 23 reflects the three-month period substituted by the 2004 amendment; Sections 24–25 are included to preserve the separate-execution rule and conditional late-presentation exception. Run `npm --prefix backend run seed:legal` to reconcile those sections into the configured collection, or use the **Seed bundled verified starter** action in Admin Settings. This is a starter corpus, not a complete 28-entry catalog; upload additional verified source text to broaden coverage.
+
 Run from the repository root in PowerShell. Replace the quoted values with a known question and the exact `section` and `lawTitle` values from your corpus.
 
 ```powershell

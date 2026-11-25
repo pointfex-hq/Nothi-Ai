@@ -108,7 +108,7 @@ export function createDocumentTexture(
 
     // ── REGISTRATION TIME LAG BOX ────────────────────────────────
     if (packet === 'B') {
-      // Planted Defect: 135 days lag (> 4 months limit under Sec. 23)
+      // Planted delay: outside the ordinary Section 23 period; check Section 25.
       ctx.fillStyle = 'rgba(192, 57, 43, 0.10)';
       ctx.fillRect(160, 1840, 1720, 210);
       ctx.strokeStyle = '#c0392b';

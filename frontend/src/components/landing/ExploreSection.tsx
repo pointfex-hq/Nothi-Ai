@@ -24,7 +24,7 @@ export function ExploreSection() {
         { label: 'Execution & Filing', val: 'Exec: 12-Oct-2023 → Pres: 18-Nov-2023 (37 Days)' },
       ],
       complianceNote:
-        'Section 23 4-month presentation window strictly satisfied. Compulsory registration requirements under Section 17 verified.',
+        'Section 23 ordinary 3-month presentation window satisfied. Check Section 25 separately if a late presentation is claimed.',
     },
     khatian: {
       type: 'Collectorate RS / BS Khatian',
@@ -205,7 +205,7 @@ export function ExploreSection() {
               </h3>
               <p className="text-xs sm:text-sm text-ink-muted font-sans leading-relaxed">
                 {lang === 'bn'
-                  ? 'তফসিলের দাগের অমিল, ৪ মাসের রেজিস্ট্রেশন সময়সীমা ও জাল দলিলের অপরাধ প্রতিরোধ আইন এক ক্লিকে পরীক্ষা করুন। প্রতিটি অনুসন্ধান আইনে আবদ্ধ।'
+                  ? 'তফসিলের দাগের অমিল, ধারা ২৩-এর সাধারণ ৩ মাসের সময়সীমা ও ধারা ২৫-এর ব্যতিক্রম পরীক্ষা করুন। প্রতিটি অনুসন্ধান আইনে আবদ্ধ।'
                   : 'Instantly cross-audit deed recitals against collectorate Record of Rights ledgers. Detect Dag mismatches, calculate Section 23 deadlines, and screen penal liabilities before loan sanction or title registration.'}
               </p>
               <div className="pt-2 flex items-center gap-2 font-sans text-xs text-ink font-medium">
@@ -256,7 +256,7 @@ export function ExploreSection() {
               </div>
 
               <div className="pt-2 flex items-center justify-between text-[11px] font-mono text-ink-muted">
-                <span>✓ 28 Sections Verified</span>
+                <span>✓ Verified source text</span>
                 <span>✓ Formal BDT Invoicing</span>
                 <span>✓ Zero Hallucination</span>
               </div>

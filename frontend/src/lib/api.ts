@@ -342,6 +342,15 @@ export const serverApi = {
       return apiRequest<ServerLegalCollectionStatus>('/api/admin/rag/status');
     },
 
+    async seedDefaultLegalCorpus(): Promise<{
+      collection: string;
+      indexedPoints: number;
+      totalPoints: number;
+      sourceFile: string;
+    }> {
+      return apiRequest('/api/admin/rag/seed/default', { method: 'POST' });
+    },
+
     async seedLegalCorpus(corpus: unknown[]): Promise<{ indexedPoints: number }> {
       return apiRequest<{ indexedPoints: number }>('/api/admin/rag/seed', {
         method: 'POST',

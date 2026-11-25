@@ -24,7 +24,7 @@ export function PricingSection({ showFaq = true }: { showFaq?: boolean }) {
     },
     {
       q: 'How is statutory accuracy protected against AI hallucination?',
-      a: 'Nothi AI enforces a zero-fabrication invariant (SRS FR-4.2, NFR-1). Findings and chat explanations must resolve against our verified legal corpus (laws_corpus.json, 28 sections across 4 Acts). Any citation ID not present in the verified corpus is deterministically stripped and logged before rendering.',
+      a: 'Nothi AI checks citations against source-verified entries in laws_corpus.json. Placeholder or unknown citation IDs are stripped before rendering. Coverage expands only when verified source text is added.',
     },
     {
       q: 'What can the Nothi AI chat answer, and what can it not?',

@@ -118,6 +118,25 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function seedDefaultCorpus() {
+    setSeeding(true);
+    setNotice(null);
+    try {
+      const result = await serverApi.admin.seedDefaultLegalCorpus();
+      setNotice({ type: 'success', text: `Seeded ${result.indexedPoints} official passages into ${result.collection}.` });
+      try {
+        setRagStatus(await serverApi.admin.getRagStatus());
+        setRagError(null);
+      } catch (error) {
+        setRagError(error instanceof Error ? error.message : 'Index status is unavailable.');
+      }
+    } catch (error) {
+      setNotice({ type: 'error', text: error instanceof Error ? error.message : 'Could not seed the bundled legal corpus.' });
+    } finally {
+      setSeeding(false);
+    }
+  }
+
   if (mounted && (!user || user.role !== 'admin')) {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-lg flex-col items-center justify-center gap-4 px-5 text-center">
@@ -203,12 +222,15 @@ export default function AdminSettingsPage() {
           <p className="mb-4 text-sm text-ink-muted">
             Collection: <code className="rounded bg-paper px-1.5 py-0.5">{ragStatus?.collection ?? 'QDRANT_LEGAL_COLLECTION'}</code>
           </p>
+          <button type="button" disabled={seeding || loading} onClick={() => void seedDefaultCorpus()} className="mb-4 rounded-full bg-green-deep px-4 py-2 text-sm font-semibold text-paper disabled:opacity-50">
+            {seeding ? 'Seeding…' : 'Seed bundled verified starter (Sections 23–25)'}
+          </button>
           <label className="block rounded-lg border-2 border-dashed border-border bg-paper p-5 text-sm">
             <span className="mb-2 block font-semibold text-ink">Choose legal corpus (.json or .jsonl, up to 8 MB)</span>
             <input type="file" accept=".json,.jsonl,application/json" disabled={seeding} onChange={seedCorpus} className="block w-full text-sm" />
           </label>
           <p className="mt-3 text-xs leading-relaxed text-ink-muted">
-            Entries must include verbatim passage text, law title, section, jurisdiction and official URL; version details are optional. Placeholder text is rejected. The bundled UI citation file contains placeholders and is not a valid RAG seed.
+            The bundled starter includes verified Registration Act Sections 23–25, including the current three-month Section 23 period and Section 25 exception. For broader coverage, upload an approved JSON/JSONL corpus with verbatim text, law title, section, jurisdiction and official URLs. Placeholder text is rejected; the UI citation catalog is not a RAG source.
           </p>
           {ragError && <p role="alert" className="mt-3 text-sm text-rose-800">{ragError}</p>}
           {seeding && <p role="status" className="mt-3 text-sm text-ink-muted">Validating and indexing corpus…</p>}

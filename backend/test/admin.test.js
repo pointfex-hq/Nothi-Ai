@@ -13,6 +13,38 @@ const adminPassword = 'admin-password-for-test';
 const userEmail = 'person@example.test';
 const userPassword = 'user-password-for-test';
 
+test('bundled RAG seed uses current Registration Act 23-25 text', () => {
+  const { parseCorpus } = require('../legal-seed');
+  const corpus = parseCorpus(readFileSync(path.join(__dirname, '..', 'legal-corpus.seed.jsonl'), 'utf8'));
+  const section23 = corpus.find(entry => entry.section === 'Section 23');
+  const section24 = corpus.find(entry => entry.section === 'Section 24');
+  const section25 = corpus.find(entry => entry.section === 'Section 25');
+  assert.equal(corpus.length, 3);
+  assert.match(section23.passage, /within three months/u);
+  assert.doesNotMatch(section23.passage, /within four months/u);
+  assert.match(section24.passage, /each execution/u);
+  assert.match(section25.passage, /urgent necessity or unavoidable accident/u);
+});
+
+test('statutory responses use the amended Section 23 period and do not claim file verification', () => {
+  const { generateStatutoryResponse } = require('../chat-statutory');
+  const answer = generateStatutoryResponse('How long is the Section 23 presentation period?', 'en');
+  assert.match(answer.content, /three months/u);
+  assert.doesNotMatch(answer.content, /four months from the date of its execution/iu);
+
+  const checklist = generateStatutoryResponse('show me the document checklist', 'en');
+  assert.doesNotMatch(checklist.content, /within 4 months per Section 23/iu);
+  assert.match(checklist.content, /within three months per Section 23/iu);
+
+  const folder = generateStatutoryResponse('show me the folder structure', 'en');
+  assert.doesNotMatch(folder.content, /4-month statutory execution window/iu);
+  assert.match(folder.content, /ordinary 3-month presentation period/iu);
+
+  const attachmentAnswer = generateStatutoryResponse('Verify this NID', 'en', [{ name: 'NID_card.png' }]);
+  assert.match(attachmentAnswer.content, /does not inspect attached document contents/iu);
+  assert.deepEqual(attachmentAnswer.citations, []);
+});
+
 async function freePort() {
   const server = net.createServer();
   await new Promise((resolve, reject) => server.once('error', reject).listen(0, '127.0.0.1', resolve));

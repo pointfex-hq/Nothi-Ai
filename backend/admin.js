@@ -11,6 +11,7 @@ const { getUserChatCount, deleteUserChats } = require('./chats');
 const chatStore = require('./chat-store');
 const { getUserUsage } = require('./ask-quota');
 const { getLegalCollectionStatus, ingestLegalCorpus } = require('./legal-retrieval');
+const { seedLegalCorpus } = require('./legal-seed');
 const { getUsageLimits, saveUsageLimits } = require('./usage-limit-settings');
 const RequestError = require('./request-error');
 
@@ -72,6 +73,16 @@ router.get('/entry-logs', (request, response) => {
 
 router.get('/rag/status', async (_request, response) => {
   response.json(await getLegalCollectionStatus());
+});
+
+router.post('/rag/seed/default', async (_request, response) => {
+  const result = await seedLegalCorpus();
+  recordAuditLog({
+    action: 'RAG_INGESTED',
+    adminId: response.locals.user.id,
+    details: `Seeded ${result.indexedPoints} bundled legal passage records`,
+  });
+  response.status(201).json(result);
 });
 
 router.post('/rag/seed', express.json({ limit: '10mb' }), async (request, response) => {
