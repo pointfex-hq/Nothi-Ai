@@ -344,14 +344,22 @@ export default function AdminPanelPage() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleSeedRag}
-            disabled={seedingRag}
-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-green-deep px-5 py-2.5 text-sm font-semibold text-paper shadow-sm hover:bg-green-mid disabled:cursor-wait disabled:opacity-60"
-          >
-            {seedingRag ? 'Seeding Qdrant…' : 'Seed RAG Knowledge'}
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/admin/settings"
+              className="inline-flex min-h-11 items-center justify-center rounded-full border border-border bg-paper px-5 py-2.5 text-sm font-semibold text-ink hover:bg-paper-dark"
+            >
+              Admin Settings
+            </Link>
+            <button
+              type="button"
+              onClick={handleSeedRag}
+              disabled={seedingRag}
+              className="inline-flex min-h-11 items-center justify-center rounded-full bg-green-deep px-5 py-2.5 text-sm font-semibold text-paper shadow-sm hover:bg-green-mid disabled:cursor-wait disabled:opacity-60"
+            >
+              {seedingRag ? 'Seeding Qdrant…' : 'Seed RAG Knowledge'}
+            </button>
+          </div>
         </div>
 
         {/* Global Notifications / Status Messages */}
