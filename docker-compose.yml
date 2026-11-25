@@ -8,9 +8,9 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3001
-      CLIENT_ORIGIN: ${CLIENT_ORIGIN:?Set CLIENT_ORIGIN to the public HTTPS URL of the frontend}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL for the first administrator}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set a strong ADMIN_PASSWORD}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       USER_EMAIL: ${USER_EMAIL:-}
       USER_PASSWORD: ${USER_PASSWORD:-}
       NOTHI_ADMIN_USER_IDS: ${NOTHI_ADMIN_USER_IDS:-}

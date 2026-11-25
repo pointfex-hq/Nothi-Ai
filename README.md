@@ -285,7 +285,7 @@ The frontend is a standalone Next.js 16 (App Router) application located in `fro
 
 ## 7. Deploying with Dokploy
 
-For VPS deployment, use the root `docker-compose.yml` in Dokploy. It builds a standalone Next.js frontend and a private Express backend with persistent chat/account storage. See [docs/DEPLOY_DOKPLOY.md](docs/DEPLOY_DOKPLOY.md) for environment variables, domain routing, and volume backup instructions.
+For default Dockerfile deployment in Dokploy, the root `Dockerfile` builds and runs the Next.js frontend and private Express backend in one container. See [docs/DEPLOY_DOKPLOY.md](docs/DEPLOY_DOKPLOY.md) for domain routing and persistent storage notes. A separate-container Compose setup is also provided.
 
 ---
 

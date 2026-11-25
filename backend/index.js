@@ -47,7 +47,9 @@ const allowedOrigins = new Set([
 app.use('/api', (request, response, next) => {
   response.set('Cache-Control', 'no-store');
   const origin = request.get('Origin');
-  const sameHost = origin === request.protocol + '://' + request.get('host');
+  const forwardedHost = request.get('x-forwarded-host')?.split(',')[0].trim();
+  const sameHost = origin === request.protocol + '://' + request.get('host') ||
+    (forwardedHost && origin === request.protocol + '://' + forwardedHost);
   const isAllowedOrigin = origin && (sameHost || allowedOrigins.has(origin));
 
   // Configure CORS headers if origin is present and recognized

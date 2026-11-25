@@ -1,19 +1,17 @@
 # Deploy with Dokploy
 
-This repository deploys as two containers using the root `docker-compose.yml`: a public Next.js frontend and a private Express backend. Backend chat/account data persists in the `backend-data` Docker volume.
+The root `Dockerfile` is configured for Dokploy's default Dockerfile deployment. It builds Next.js and the Express backend into one container, serves the app on port `3000`, and keeps the backend on the private container loopback. No Compose configuration is required.
 
 ## Dokploy Setup
 
-1. Create a Compose project in Dokploy and connect this repository and the `nextjs` branch.
-2. Set the Compose file path to `docker-compose.yml` and deploy as a Compose application.
-3. Add the environment variables below in the Dokploy project before the first deployment.
-4. Attach your domain to the `frontend` service on container port `3000` and enable HTTPS. Do not publish the backend service.
+1. Create a Dockerfile application in Dokploy and connect this repository and the `nextjs` branch.
+2. Keep the default Dockerfile path (`Dockerfile`) and deploy. Dokploy should detect container port `3000`.
+3. Attach your domain to port `3000` and enable HTTPS.
 
-Required variables:
+No environment variables are required for the app to start. Users can register normally; set the following only if you want an environment-seeded administrator:
 
 | Variable | Example |
 | --- | --- |
-| `CLIENT_ORIGIN` | `https://nothiai.example.com` |
 | `ADMIN_EMAIL` | `admin@example.com` |
 | `ADMIN_PASSWORD` | A unique, strong password |
 
@@ -29,17 +27,17 @@ Optional integrations and settings:
 | `NOTHI_ASK_PER_MINUTE` / `NOTHI_ASK_PER_DAY` | Ask request limits |
 | `NOTHI_ASK_MAX_OUTPUT_TOKENS` / `NOTHI_ASK_DAILY_TOKEN_BUDGET` | Model usage limits |
 
-`CLIENT_ORIGIN` must exactly match the browser-facing HTTPS origin. The frontend proxies `/api` requests to the backend over the private Compose network, so no public API subdomain is needed. The frontend image is built with `http://backend:3001` as its internal API destination; change the `INTERNAL_API_URL` build argument in the Compose file only if the backend service/network name changes.
+The Next.js frontend proxies `/api` requests to the backend inside the same container. Same-origin requests are checked against the forwarded host; if your reverse proxy does not forward `X-Forwarded-Host`, set `CLIENT_ORIGIN` to the exact public HTTPS origin.
 
-Back up the Dokploy Docker volume named for this Compose project’s `backend-data` volume. It contains the SQLite chat database, accounts, usage limits, and audit logs. Recreating containers preserves it; deleting the volume does not.
+The image declares `/app/backend/data` as a Docker volume for SQLite chats, accounts, usage limits, and audit logs. For durable backups across container replacement, configure persistent storage in Dokploy. Alternatively, use the root `docker-compose.yml`, which defines a named `backend-data` volume and separate frontend/backend containers.
 
 ## Local Container Check
 
-With Docker Compose installed, set the required environment variables in the shell or a local `.env` file, then run:
+To run the default single-container image locally:
 
 ```sh
-docker compose config
-docker compose up --build
+docker build -t nothi-ai .
+docker run --rm -p 3000:3000 -v nothi-data:/app/backend/data nothi-ai
 ```
 
-The application listens on port `3000`; the backend listens only on the internal Compose network at port `3001`.
+The application listens on port `3000`; the backend listens only on `127.0.0.1:3001` inside the container.
