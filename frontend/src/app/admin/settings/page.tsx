@@ -208,7 +208,7 @@ export default function AdminSettingsPage() {
           )}
         </section>
 
-        <section className="rounded-xl border border-border bg-paper-light p-5 shadow-xs sm:p-7">
+        <section id="rag-knowledge" className="scroll-mt-24 rounded-xl border border-border bg-paper-light p-5 shadow-xs sm:p-7">
           <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
             <div>
               <h2 className="font-heading text-xl font-bold text-green-deep">RAG Legal Knowledge</h2>
@@ -223,7 +223,7 @@ export default function AdminSettingsPage() {
             Collection: <code className="rounded bg-paper px-1.5 py-0.5">{ragStatus?.collection ?? 'QDRANT_LEGAL_COLLECTION'}</code>
           </p>
           <button type="button" disabled={seeding || loading} onClick={() => void seedDefaultCorpus()} className="mb-4 rounded-full bg-green-deep px-4 py-2 text-sm font-semibold text-paper disabled:opacity-50">
-            {seeding ? 'Seeding…' : 'Seed bundled verified starter (Sections 23–25)'}
+            {seeding ? 'Seeding Qdrant…' : 'Seed Qdrant now (Sections 23–25)'}
           </button>
           <label className="block rounded-lg border-2 border-dashed border-border bg-paper p-5 text-sm">
             <span className="mb-2 block font-semibold text-ink">Choose legal corpus (.json or .jsonl, up to 8 MB)</span>

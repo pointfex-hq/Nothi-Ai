@@ -322,7 +322,12 @@ export default function AdminPanelPage() {
               </p>
             </div>
           </div>
-
+          <Link
+            href="/admin/settings#rag-knowledge"
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-green-deep px-5 py-2.5 text-sm font-semibold text-paper shadow-sm hover:bg-green-mid"
+          >
+            Seed RAG Knowledge
+          </Link>
         </div>
 
         {/* Global Notifications / Status Messages */}
@@ -383,8 +388,8 @@ export default function AdminPanelPage() {
                 {ragStatus?.exists ? `${ragStatus.points.toLocaleString()} passages` : 'Not seeded'}
               </span>
             </div>
-            <Link href="/admin/settings" className="text-xs font-semibold text-green-deep hover:underline">
-              {ragStatus?.collection || 'Check connection and seed knowledge'} · Manage settings
+            <Link href="/admin/settings#rag-knowledge" className="inline-flex rounded-full border border-green-deep px-3 py-1.5 text-xs font-semibold text-green-deep hover:bg-green-deep hover:text-paper">
+              {ragStatus?.collection || 'Open RAG seeding tools'} · Seed knowledge
             </Link>
           </div>
 
