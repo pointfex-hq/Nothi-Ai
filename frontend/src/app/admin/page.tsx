@@ -57,6 +57,7 @@ export default function AdminPanelPage() {
   const [entryLogPage, setEntryLogPage] = useState<{ entries: ServerAccessEvent[]; total: number }>({ entries: [], total: 0 });
   const [entryPageIndex, setEntryPageIndex] = useState(0);
   const [entryLogsLoading, setEntryLogsLoading] = useState(true);
+  const [seedingRag, setSeedingRag] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Authentication & Role Route Guard
@@ -194,6 +195,27 @@ export default function AdminPanelPage() {
     }
   };
 
+  const handleSeedRag = async () => {
+    setSeedingRag(true);
+    setStatusMessage(null);
+    try {
+      const result = await serverApi.admin.seedDefaultLegalCorpus();
+      setStatusMessage({
+        type: 'success',
+        text: `Seeded ${result.indexedPoints} verified passages into ${result.collection}.`,
+      });
+      try {
+        setRagStatus(await serverApi.admin.getRagStatus());
+      } catch {
+        // Preserve the seed success notice if only the status refresh fails.
+      }
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'Could not seed the legal index.' });
+    } finally {
+      setSeedingRag(false);
+    }
+  };
+
   const executeUserLifecycleAction = async () => {
     if (!confirmModal.targetUser) return;
     const target = confirmModal.targetUser;
@@ -322,12 +344,14 @@ export default function AdminPanelPage() {
               </p>
             </div>
           </div>
-          <Link
-            href="/admin/settings#rag-knowledge"
-            className="inline-flex min-h-11 items-center justify-center rounded-full bg-green-deep px-5 py-2.5 text-sm font-semibold text-paper shadow-sm hover:bg-green-mid"
+          <button
+            type="button"
+            onClick={handleSeedRag}
+            disabled={seedingRag}
+            className="inline-flex min-h-11 items-center justify-center rounded-full bg-green-deep px-5 py-2.5 text-sm font-semibold text-paper shadow-sm hover:bg-green-mid disabled:cursor-wait disabled:opacity-60"
           >
-            Seed RAG Knowledge
-          </Link>
+            {seedingRag ? 'Seeding Qdrant…' : 'Seed RAG Knowledge'}
+          </button>
         </div>
 
         {/* Global Notifications / Status Messages */}
@@ -389,7 +413,7 @@ export default function AdminPanelPage() {
               </span>
             </div>
             <Link href="/admin/settings#rag-knowledge" className="inline-flex rounded-full border border-green-deep px-3 py-1.5 text-xs font-semibold text-green-deep hover:bg-green-deep hover:text-paper">
-              {ragStatus?.collection || 'Open RAG seeding tools'} · Seed knowledge
+              {ragStatus?.collection || 'Configure corpus'} · Manage sources
             </Link>
           </div>
 
