@@ -283,6 +283,10 @@ The frontend is a standalone Next.js 16 (App Router) application located in `fro
    - `NEXT_PUBLIC_APP_URL`: Your production domain (e.g., `https://nothiai.com`).
    - `INTERNAL_API_URL`: URL of your deployed backend service (e.g., Railway, Render, Cloud Run).
 
+## 7. Deploying with Dokploy
+
+For VPS deployment, use the root `docker-compose.yml` in Dokploy. It builds a standalone Next.js frontend and a private Express backend with persistent chat/account storage. See [docs/DEPLOY_DOKPLOY.md](docs/DEPLOY_DOKPLOY.md) for environment variables, domain routing, and volume backup instructions.
+
 ---
 
 ## License & Copyright

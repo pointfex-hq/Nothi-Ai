@@ -1,4 +1,5 @@
 const express = require('express');
+const RequestError = require('./request-error');
 
 const router = express.Router();
 
@@ -331,10 +332,20 @@ router.post('/upload', express.json({ limit: '2mb' }), (req, res) => {
 
 router.post('/run', express.json({ limit: '5mb' }), (req, res) => {
   const { packet, files = [] } = req.body ?? {};
+  const benchmarkIds = packet === 'A'
+    ? ['bench-A-deed', 'bench-A-khatian', 'bench-A-nid']
+    : packet === 'B'
+    ? ['bench-B-deed', 'bench-B-khatian', 'bench-B-nid']
+    : null;
+
+  if (!benchmarkIds || !Array.isArray(files) || files.length !== benchmarkIds.length ||
+      files.some((file, index) => file?.id !== benchmarkIds[index])) {
+    throw new RequestError(422, 'Uploaded documents are not analyzed. Only the built-in benchmark packets can currently be evaluated.');
+  }
+
   if (packet === 'B') {
     return res.json({ ...packetBResult, timestamp: new Date().toISOString() });
   }
-  // Default to Packet A compliant or custom evaluated result
   return res.json({ ...packetAResult, timestamp: new Date().toISOString() });
 });
 

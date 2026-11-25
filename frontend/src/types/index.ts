@@ -148,5 +148,5 @@ export interface CorpusSection {
 /** Bundle of files sent to the backend for audit */
 export interface AuditBundle {
   files: UploadedFile[];
-  packet?: 'A' | 'B';
+  packet?: 'A' | 'B' | null;
 }

@@ -259,6 +259,7 @@ router.patch('/profile', requireUser, express.json({ limit: '8kb' }), async (req
   if (!account) throw new RequestError(404, 'Account not found.');
 
   const { name, currentPassword, newPassword } = request.body || {};
+  const passwordChanged = Boolean(newPassword);
 
   // Display Name Update
   if (typeof name === 'string' && name.trim()) {
@@ -294,9 +295,13 @@ router.patch('/profile', requireUser, express.json({ limit: '8kb' }), async (req
   writeLocalJson(accountsFile, [...accounts.values()]);
 
   const updatedUser = publicUser(account);
-  // Update session references
-  for (const session of sessions.values()) {
+  const currentToken = getSessionToken(request);
+  for (const [token, session] of sessions) {
     if (session.user.id === account.id) {
+      if (passwordChanged && token !== currentToken) {
+        sessions.delete(token);
+        continue;
+      }
       session.user = updatedUser;
     }
   }

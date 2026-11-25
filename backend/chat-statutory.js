@@ -10,61 +10,15 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
   const isBangla = lang === 'bn' || /[\u0980-\u09FF]/.test(prompt);
   const lower = prompt.toLowerCase().trim();
   const hasAttachments = attachments && attachments.length > 0;
-  const attachmentNames = hasAttachments
-    ? attachments.map((a) => a.name.toLowerCase()).join(' ')
-    : '';
 
-  // 1. DEDICATED DOCUMENT ATTACHMENT ANALYSIS
+  // This mode answers legal questions, but does not inspect attached document contents.
   if (hasAttachments) {
-    const fileNames = attachments.map((a) => `"${a.name}"`).join(', ');
-
-    if (
-      attachmentNames.includes('nid') ||
-      attachmentNames.includes('identity') ||
-      attachmentNames.includes('smart') ||
-      lower.includes('nid') ||
-      lower.includes('পরিচয়')
-    ) {
-      return {
-        content: isBangla
-          ? `✓ **জাতীয় পরিচয়পত্র যাচাই সম্পন্ন (${fileNames})**\n\n• **কাঠামোগত বিন্যাস:** এনআইডি নিবন্ধন বিধিমালা ২০১০ এর বিধি ৩ অনুসারে ১০-ডিজিটের স্মার্ট কার্ড অথবা ১৭-ডিজিটের প্রমিত বিন্যাস যাচাই করা হয়েছে।\n• **নাম ও তথ্যের সমতা:** বিধি ৫ অনুসারে দলিলের পক্ষগণের নামের সাথে পরিচয়পত্রের বাংলা ও ইংরেজি বানান এবং জন্মতারিখের সমতা পরীক্ষা করা হয়েছে।\n• **সংবিধিবদ্ধ স্ট্যাটাস:** কোনো নকল বা অবৈধ সংখ্যা পাওয়া যায়নি। সাব-রেজিস্ট্রি অফিসে হস্তান্তরের জন্য পরিচয় রেকর্ড বৈধ।`
-          : `✓ **National Identity Record Verified (${fileNames})**\n\n• **Structural Format:** Validated under Rule 3 of the National Identity Registration Rules (NIDW Rules, 2010). Conforms to either 10-digit Smart NID or legacy 13/17-digit format.\n• **Name & Demographic Parity:** Cross-audited under Rule 5 against conveyance party recitals. Character match verified for transferor/transferee credentials.\n• **Statutory Status:** Certified valid for Sub-Registry deed execution and institutional title vetting.`,
-        citations: [
-          { id: 'nidw_rules_r3', act: 'National Identity Registration Rules, 2010', section: 'Rule 3' },
-          { id: 'nidw_rules_r5', act: 'National Identity Registration Rules, 2010', section: 'Rule 5' },
-        ],
-      };
-    } else if (
-      attachmentNames.includes('khatian') ||
-      attachmentNames.includes('porcha') ||
-      attachmentNames.includes('ledger') ||
-      attachmentNames.includes('rs') ||
-      attachmentNames.includes('bs') ||
-      lower.includes('khatian') ||
-      lower.includes('খতিয়ান')
-    ) {
-      return {
-        content: isBangla
-          ? `✓ **কালেক্টরেট খতিয়ান ও স্বত্বলিপি পরীক্ষা সম্পন্ন (${fileNames})**\n\n• **মালিকানার ধারাবাহিকতা:** রেজিস্ট্রেশন আইন ১৯০৮ এর ধারা ১৭ ও সম্পত্তি হস্তান্তর আইন ১৮৮২ এর ধারা ৫৪ অনুসারে রেকর্ড অব রাইটস যাচাই করা হয়েছে।\n• **দাগ নম্বর ও মৌজা:** দলিলের তফসিলভুক্ত দাগ নম্বরের সাথে আরএস/বিএস খতিয়ান লেজারের দাগ নম্বর এবং জমির পরিমাণ (একর/শতক) হুবহু মিলেছে।\n• **মামলা ও স্বত্ব জটিলতা:** ধারা ৫২ (Lis Pendens) অনুযায়ী কোনো বিচারাধীন দেওয়ানি মোকদ্দমার নোট পাওয়া যায়নি।\n• **নামজারি স্ট্যাটাস:** হালনাগাদ খারিজ খতিয়ান ও খাজনা দাখিলা প্রস্তুত রয়েছে।`
-          : `✓ **Collectorate Khatian Ledger Audited (${fileNames})**\n\n• **Title Lineage:** Cross-referenced against statutory title continuity standards under Registration Act 1908 Section 17 and Transfer of Property Act 1882 Section 54.\n• **Plot & Schedule Parity:** RS/BS ledger Dag allocations and acreage match deed schedule boundaries with zero discrepancy.\n• **Encumbrance & Lis Pendens:** Clean title record—no adverse court proceedings detected under Section 52 of TPA 1882.\n• **Mutation Standing:** Up-to-date Collectorate record confirms vendor's legitimate right to convey.`,
-        citations: [
-          { id: 'reg_act_1908_s17', act: 'Registration Act, 1908', section: 'Section 17' },
-          { id: 'tpa_1882_s54', act: 'Transfer of Property Act, 1882', section: 'Section 54' },
-          { id: 'tpa_1882_s52', act: 'Transfer of Property Act, 1882', section: 'Section 52' },
-        ],
-      };
-    } else {
-      return {
-        content: isBangla
-          ? `✓ **সাফ কবলা সম্পত্তি দলিল যাচাই সম্পন্ন (${fileNames})**\n\n• **দাখিলের সময়সীমা (ধারা ২৩):** রেজিস্ট্রেশন আইন ১৯০৮ এর ধারা ২৩ অনুসারে দলিল সম্পাদনের তারিখ থেকে সংবিধিবদ্ধ ৪ মাসের মধ্যে সাব-রেজিস্ট্রারে দাখিলের সময়সীমা পরীক্ষা করা হয়েছে। বর্তমান তারিখ সংবিধিবদ্ধ মেয়াদের মধ্যে রয়েছে।\n• **বাধ্যতামূলক নিবন্ধন (ধারা ১৭):** স্থাবর সম্পত্তি হস্তান্তরের দলিল হিসেবে ধারা ১৭ এর শর্তানুযায়ী বাধ্যতামূলকভাবে রেজিস্ট্রি করতে হবে; অন্যথায় ধারা ৪৯ মতে কোনো স্বত্ব কার্যকর হবে না।\n• **ভূমি অপরাধ প্রতিরোধ (ধারা ৪):** ভূমি অপরাধ প্রতিরোধ ও প্রতিকার আইন ২০২৩ এর ধারা ৪ অনুযায়ী কোনো জালিয়াতি বা অপরাধমূলক অসঙ্গতি পাওয়া যায়নি।`
-          : `✓ **Saf Kabala Conveyance Deed Audited (${fileNames})**\n\n• **Presentation Window (Section 23):** Evaluated under Registration Act 1908 Section 23. Execution date complies with the strict 4-month statutory filing deadline.\n• **Compulsory Registration (Section 17 & 49):** Immovable property conveyance satisfies Section 17 mandatory registration rules, ensuring full legal validity under Section 49.\n• **Penal Integrity (Section 4):** Zero fraudulent recitals or title falsification detected under Section 4 of the Land Crime Prevention and Remedy Act, 2023.`,
-        citations: [
-          { id: 'reg_act_1908_s23', act: 'Registration Act, 1908', section: 'Section 23' },
-          { id: 'reg_act_1908_s17', act: 'Registration Act, 1908', section: 'Section 17' },
-          { id: 'lcpra_2023_s4', act: 'Land Crime Prevention & Remedy Act, 2023', section: 'Section 4' },
-        ],
-      };
-    }
+    return {
+      content: isBangla
+        ? 'এই স্ট্যাটিউটরি মোড সংযুক্ত নথির বিষয়বস্তু পরীক্ষা করে না; শুধু ফাইলের নাম দেখে কোনো যাচাই করা হয়নি। নথির লেখা সম্পর্কে প্রশ্ন করতে Document Q&A ব্যবহার করুন, অথবা সংযুক্তি ছাড়া সাধারণ আইনি প্রশ্ন করুন।'
+        : 'Statutory mode does not inspect attached document contents, and no verification was performed from the filenames. Use Document Q&A for questions about document text, or ask a general legal question without attachments.',
+      citations: [],
+    };
   }
 
   // 2. FOLDER STRUCTURE REQUESTS

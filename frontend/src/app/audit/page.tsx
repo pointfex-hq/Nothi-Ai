@@ -60,8 +60,9 @@ export default function AuditWorkspacePage() {
     },
   ]);
 
-  const [selectedPacket, setSelectedPacket] = useState<'A' | 'B'>('A');
+  const [selectedPacket, setSelectedPacket] = useState<'A' | 'B' | null>('A');
   const [isAuditing, setIsAuditing] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const [auditResult, setAuditResult] = useState<AuditResult | null>(null);
   const [activeDoc, setActiveDoc] = useState<DocType>('deed');
@@ -78,6 +79,8 @@ export default function AuditWorkspacePage() {
   async function handleLoadBenchmark(packet: 'A' | 'B') {
     setSelectedPacket(packet);
     setSelectedFlag(null);
+    setAuditError(null);
+    setAuditResult(null);
 
     const benchmarkFiles: UploadedFile[] = [
       {
@@ -125,6 +128,9 @@ export default function AuditWorkspacePage() {
           }
         }
       }
+    } catch (error) {
+      setAuditResult(null);
+      setAuditError(error instanceof Error ? error.message : 'The benchmark could not be loaded. Try again.');
     } finally {
       setIsAuditing(false);
       setProgress(null);
@@ -133,19 +139,40 @@ export default function AuditWorkspacePage() {
 
   async function handleRunAudit() {
     if (files.length === 0) return;
+    if (!selectedPacket) {
+      setAuditResult(null);
+      setAuditError(lang === 'bn'
+        ? 'আপলোড করা নথি এখনো বিশ্লেষণ করা হয় না। বর্তমানে শুধু অন্তর্নির্মিত বেঞ্চমার্ক প্যাকেট চালানো যায়।'
+        : 'Uploaded documents are not analyzed yet. Only the built-in benchmark packets can currently be evaluated.');
+      return;
+    }
+
     setIsAuditing(true);
     setProgress(null);
+    setAuditError(null);
+    setAuditResult(null);
 
     try {
       const res = await runAudit(
-        { files, packet: selectedPacket ?? 'A' },
+        { files, packet: selectedPacket },
         (p) => setProgress(p)
       );
       setAuditResult(res);
+    } catch (error) {
+      setAuditResult(null);
+      setAuditError(error instanceof Error ? error.message : 'The audit could not be completed. Try again.');
     } finally {
       setIsAuditing(false);
       setProgress(null);
     }
+  }
+
+  function handleFilesChange(nextFiles: UploadedFile[]) {
+    setFiles(nextFiles);
+    setSelectedPacket(null);
+    setSelectedFlag(null);
+    setAuditError(null);
+    setAuditResult(null);
   }
 
   function handleSelectFlag(flag: Flag) {
@@ -243,6 +270,12 @@ export default function AuditWorkspacePage() {
         </div>
       )}
 
+      {auditError && (
+        <div role="alert" className="rounded-sm border border-vermillion/30 bg-vermillion/10 p-3 text-sm text-vermillion">
+          {auditError}
+        </div>
+      )}
+
       {/* Split-Screen Primary Workspace */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT PANE: Document Viewer (Sticky on desktop, 5 cols) */}
@@ -261,7 +294,7 @@ export default function AuditWorkspacePage() {
           {/* a) Intake Section */}
           <IntakeSection
             files={files}
-            onFilesChange={setFiles}
+            onFilesChange={handleFilesChange}
             onLoadBenchmark={handleLoadBenchmark}
             onRunAudit={handleRunAudit}
             isAuditing={isAuditing}

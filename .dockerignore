@@ -1,0 +1,12 @@
+.git
+.next
+**/.next
+**/node_modules
+**/coverage
+**/*.log
+**/.env*
+backend/data
+backend/accounts.json
+backend/usage-limits.json
+backend/audit-logs.json
+backend/*.local.json
