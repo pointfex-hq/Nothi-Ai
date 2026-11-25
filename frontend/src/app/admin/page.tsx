@@ -1,26 +1,28 @@
 'use client';
 
-import { useState, useEffect, useSyncExternalStore, FormEvent } from 'react';
+import { useState, useEffect, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useLang } from '@/lib/lang';
 import {
   serverApi,
-  ServerUsageLimits,
   ServerAdminUser,
+  ServerAccessEvent,
   ServerAuditLog,
+  ServerLegalCollectionStatus,
 } from '@/lib/api';
 import { SignInModal } from '@/components/auth/SignInModal';
 
 const emptySubscribe = () => () => {};
 const getClientSnapshot = () => true;
 const getServerSnapshot = () => false;
+const entryPageSize = 50;
 
 export default function AdminPanelPage() {
   const router = useRouter();
   const { lang } = useLang();
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const [signInModalOpen, setSignInModalOpen] = useState(false);
   const mounted = useSyncExternalStore(emptySubscribe, getClientSnapshot, getServerSnapshot);
 
@@ -29,17 +31,18 @@ export default function AdminPanelPage() {
   const [healthLoading, setHealthLoading] = useState(false);
   const [healthTimestamp, setHealthTimestamp] = useState<string>('');
   const [healthLatency, setHealthLatency] = useState<number | null>(null);
+  const [ragStatus, setRagStatus] = useState<ServerLegalCollectionStatus | null>(null);
 
   // User Directory States
   const [users, setUsers] = useState<ServerAdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'suspended' | 'banned'>('all');
 
   // User Lifecycle Action Modals
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'suspend' | 'reactivate' | 'delete';
+    type: 'suspend' | 'ban' | 'reactivate' | 'delete';
     targetUser: ServerAdminUser | null;
   }>({
     isOpen: false,
@@ -51,22 +54,9 @@ export default function AdminPanelPage() {
   // Audit Logs States
   const [auditLogs, setAuditLogs] = useState<ServerAuditLog[]>([]);
   const [auditLogsLoading, setAuditLogsLoading] = useState(true);
-
-  // Usage Limits States
-  const [limits, setLimits] = useState<ServerUsageLimits>({
-    questionsPerMinute: 5,
-    questionsPerDay: 10,
-    maxOutputTokens: 500,
-    dailyTokenBudget: 50000,
-  });
-  const [initialLimits, setInitialLimits] = useState<ServerUsageLimits>({
-    questionsPerMinute: 5,
-    questionsPerDay: 10,
-    maxOutputTokens: 500,
-    dailyTokenBudget: 50000,
-  });
-  const [limitsLoading, setLimitsLoading] = useState(true);
-  const [savingLimits, setSavingLimits] = useState(false);
+  const [entryLogPage, setEntryLogPage] = useState<{ entries: ServerAccessEvent[]; total: number }>({ entries: [], total: 0 });
+  const [entryPageIndex, setEntryPageIndex] = useState(0);
+  const [entryLogsLoading, setEntryLogsLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Authentication & Role Route Guard
@@ -77,7 +67,7 @@ export default function AdminPanelPage() {
     }
   }, [mounted, user, router]);
 
-  // Load live health, usage limits, user directory, and audit logs on mount
+  // Load the directory and event history once for the authenticated administrator.
   useEffect(() => {
     if (!mounted || !user || user.role !== 'admin') return;
 
@@ -102,26 +92,7 @@ export default function AdminPanelPage() {
         }
       }
 
-      // 2. Fetch admin usage limits
-      setLimitsLoading(true);
-      try {
-        const currentLimits = await serverApi.admin.getUsageLimits();
-        if (!isCancelled) {
-          setLimits(currentLimits);
-          setInitialLimits(currentLimits);
-          setLimitsLoading(false);
-        }
-      } catch (err: unknown) {
-        if (!isCancelled) {
-          setStatusMessage({
-            type: 'error',
-            text: err instanceof Error ? err.message : 'Could not fetch admin usage limits.',
-          });
-          setLimitsLoading(false);
-        }
-      }
-
-      // 3. Fetch user directory
+      // Fetch the complete user directory with daily quota usage.
       setUsersLoading(true);
       try {
         const userList = await serverApi.admin.getUsers();
@@ -136,7 +107,7 @@ export default function AdminPanelPage() {
         }
       }
 
-      // 4. Fetch audit logs
+      // Fetch administrative and account-entry logs independently.
       setAuditLogsLoading(true);
       try {
         const logs = await serverApi.admin.getAuditLogs();
@@ -150,6 +121,23 @@ export default function AdminPanelPage() {
           setAuditLogsLoading(false);
         }
       }
+
+      try {
+        const page = await serverApi.admin.getEntryLogs(entryPageSize, 0);
+        if (!isCancelled) setEntryLogPage(page);
+      } catch (err: unknown) {
+        if (!isCancelled) console.warn('Could not load account entry logs:', err);
+      } finally {
+        if (!isCancelled) setEntryLogsLoading(false);
+      }
+
+      try {
+        const status = await serverApi.admin.getRagStatus();
+        if (!isCancelled) setRagStatus(status);
+      } catch {
+        if (!isCancelled) setRagStatus(null);
+      }
+
     }
 
     loadData();
@@ -157,6 +145,39 @@ export default function AdminPanelPage() {
       isCancelled = true;
     };
   }, [mounted, user]);
+
+  useEffect(() => {
+    if (!mounted || !user || user.role !== 'admin') return;
+    const timer = window.setInterval(() => {
+      serverApi.admin.getEntryLogs(entryPageSize, entryPageIndex * entryPageSize)
+        .then(setEntryLogPage)
+        .catch(() => {});
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [entryPageIndex, mounted, user]);
+
+  const refreshEntryLogs = async () => {
+    setEntryLogsLoading(true);
+    try {
+      setEntryLogPage(await serverApi.admin.getEntryLogs(entryPageSize, entryPageIndex * entryPageSize));
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'Could not refresh entry logs.' });
+    } finally {
+      setEntryLogsLoading(false);
+    }
+  };
+
+  const changeEntryPage = async (pageIndex: number) => {
+    setEntryLogsLoading(true);
+    try {
+      setEntryLogPage(await serverApi.admin.getEntryLogs(entryPageSize, pageIndex * entryPageSize));
+      setEntryPageIndex(pageIndex);
+    } catch (error) {
+      setStatusMessage({ type: 'error', text: error instanceof Error ? error.message : 'Could not load entry logs.' });
+    } finally {
+      setEntryLogsLoading(false);
+    }
+  };
 
   const handleRefreshHealth = async () => {
     setHealthLoading(true);
@@ -173,56 +194,25 @@ export default function AdminPanelPage() {
     }
   };
 
-  const handleSaveLimits = async (e: FormEvent) => {
-    e.preventDefault();
-    setSavingLimits(true);
-    setStatusMessage(null);
-
-    try {
-      const updated = await serverApi.admin.saveUsageLimits({
-        questionsPerMinute: Number(limits.questionsPerMinute),
-        questionsPerDay: Number(limits.questionsPerDay),
-        maxOutputTokens: Number(limits.maxOutputTokens),
-        dailyTokenBudget: Number(limits.dailyTokenBudget),
-      });
-      setLimits(updated);
-      setInitialLimits(updated);
-
-      // Refresh audit logs
-      serverApi.admin.getAuditLogs().then(setAuditLogs).catch(() => {});
-
-      setStatusMessage({
-        type: 'success',
-        text: lang === 'bn' ? 'ব্যবহারের কোটা ও সীমাবদ্ধতা সফলভাবে আপডেট করা হয়েছে।' : 'Usage limits updated successfully and active across all vetting sessions.',
-      });
-    } catch (err: unknown) {
-      setStatusMessage({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Failed to save usage limits.',
-      });
-    } finally {
-      setSavingLimits(false);
-    }
-  };
-
   const executeUserLifecycleAction = async () => {
     if (!confirmModal.targetUser) return;
     const target = confirmModal.targetUser;
     setActionLoading(true);
     try {
-      if (confirmModal.type === 'suspend') {
-        const updated = await serverApi.admin.updateUserStatus(target.id, 'suspended');
+      if (confirmModal.type === 'suspend' || confirmModal.type === 'ban') {
+        const status = confirmModal.type === 'ban' ? 'banned' : 'suspended';
+        const updated = await serverApi.admin.updateUserStatus(target.id, status);
         setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, status: updated.status } : u)));
         setStatusMessage({
           type: 'success',
-          text: `Account ${target.username} has been suspended. All active sessions have been immediately revoked.`,
+          text: `Account ${target.username} has been ${status}. All active sessions have been revoked.`,
         });
       } else if (confirmModal.type === 'reactivate') {
         const updated = await serverApi.admin.updateUserStatus(target.id, 'active');
         setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, status: updated.status } : u)));
         setStatusMessage({
           type: 'success',
-          text: `Account ${target.username} has been reactivated.`,
+          text: `Account ${target.username} has been ${target.status === 'banned' ? 'unbanned' : 'reactivated'}.`,
         });
       } else if (confirmModal.type === 'delete') {
         await serverApi.admin.deleteUser(target.id);
@@ -248,12 +238,6 @@ export default function AdminPanelPage() {
     }
   };
 
-  const isLimitsDirty =
-    limits.questionsPerMinute !== initialLimits.questionsPerMinute ||
-    limits.questionsPerDay !== initialLimits.questionsPerDay ||
-    limits.maxOutputTokens !== initialLimits.maxOutputTokens ||
-    limits.dailyTokenBudget !== initialLimits.dailyTokenBudget;
-
   // Filtered Users
   const filteredUsers = users.filter((u) => {
     const matchesQuery =
@@ -264,7 +248,8 @@ export default function AdminPanelPage() {
     const matchesStatus =
       userStatusFilter === 'all' ||
       (userStatusFilter === 'active' && u.status === 'active') ||
-      (userStatusFilter === 'suspended' && u.status === 'suspended');
+      (userStatusFilter === 'suspended' && u.status === 'suspended') ||
+      (userStatusFilter === 'banned' && u.status === 'banned');
 
     return matchesQuery && matchesStatus;
   });
@@ -338,36 +323,6 @@ export default function AdminPanelPage() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <Link
-              href="/dashboard"
-              className="px-4 py-2 rounded-full border border-border bg-paper hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs"
-            >
-              {lang === 'bn' ? 'ইউজার ড্যাশবোর্ড' : 'User Dashboard'}
-            </Link>
-            <Link
-              href="/chat"
-              className="px-4 py-2 rounded-full bg-green-deep hover:bg-green-mid text-paper font-sans text-xs font-semibold transition-all shadow-xs"
-            >
-              {lang === 'bn' ? 'চ্যাট' : 'Chat'}
-            </Link>
-            <Link
-              href="/audit"
-              className="px-4 py-2 rounded-full border border-border bg-paper hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs"
-            >
-              {lang === 'bn' ? 'অডিট' : 'Audit'}
-            </Link>
-            <button
-              type="button"
-              onClick={async () => {
-                await signOut();
-                router.push('/');
-              }}
-              className="px-4 py-2 rounded-full border border-vermillion/40 text-vermillion hover:bg-vermillion/10 font-sans text-xs font-semibold transition-colors cursor-pointer"
-            >
-              {lang === 'bn' ? 'সাইন আউট' : 'Sign Out'}
-            </button>
-          </div>
         </div>
 
         {/* Global Notifications / Status Messages */}
@@ -419,18 +374,18 @@ export default function AdminPanelPage() {
             </div>
           </div>
 
-          {/* Corpus Status Card */}
+          {/* RAG Index Status Card */}
           <div className="p-6 rounded-2xl bg-paper-light border border-border shadow-xs space-y-3">
-            <span className="text-xs font-mono uppercase tracking-wider text-ink-muted">Statutory Legal Corpus</span>
+            <span className="text-xs font-mono uppercase tracking-wider text-ink-muted">RAG Knowledge Index</span>
             <div className="flex items-center gap-2.5">
-              <span className="w-3 h-3 rounded-full bg-emerald-600" />
+              <span className={`w-3 h-3 rounded-full ${ragStatus?.exists ? 'bg-emerald-600' : 'bg-amber-500'}`} />
               <span className="font-heading text-xl font-bold text-green-deep">
-                28 Verified Sections
+                {ragStatus?.exists ? `${ragStatus.points.toLocaleString()} passages` : 'Not seeded'}
               </span>
             </div>
-            <div className="text-xs text-ink-muted font-sans">
-              Registration Act 1908 • TPA 1882 • Land Crime 2023 • NID 2010
-            </div>
+            <Link href="/admin/settings" className="text-xs font-semibold text-green-deep hover:underline">
+              {ragStatus?.collection || 'Check connection and seed knowledge'} · Manage settings
+            </Link>
           </div>
 
           {/* Security & Firewall Card */}
@@ -473,12 +428,13 @@ export default function AdminPanelPage() {
 
               <select
                 value={userStatusFilter}
-                onChange={(e) => setUserStatusFilter(e.target.value as 'all' | 'active' | 'suspended')}
+                onChange={(e) => setUserStatusFilter(e.target.value as 'all' | 'active' | 'suspended' | 'banned')}
                 className="px-3 py-1.5 rounded-full border border-border bg-paper text-ink text-xs font-sans focus:outline-hidden focus:border-brass"
               >
                 <option value="all">{lang === 'bn' ? 'সকল স্ট্যাটাস' : 'All Statuses'}</option>
                 <option value="active">{lang === 'bn' ? 'সক্রিয় (Active)' : 'Active Only'}</option>
                 <option value="suspended">{lang === 'bn' ? 'স্থগিত (Suspended)' : 'Suspended Only'}</option>
+                <option value="banned">Banned</option>
               </select>
             </div>
           </div>
@@ -499,6 +455,7 @@ export default function AdminPanelPage() {
                     <th className="py-3 px-4">Account Identifier</th>
                     <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4">Usage Today</th>
                     <th className="py-3 px-4">Private Chats</th>
                     <th className="py-3 px-4">Created Date</th>
                     <th className="py-3 px-4 text-right">Lifecycle Actions</th>
@@ -507,7 +464,7 @@ export default function AdminPanelPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredUsers.map((u) => {
                     const isCurrentAdmin = u.id === user?.id;
-                    const isRootEnvAdmin = u.isEnvAccount && u.role === 'admin';
+                    const isProtectedAdmin = u.isSuperAdmin || u.role === 'admin';
 
                     return (
                       <tr key={u.id} className="hover:bg-paper/60 transition-colors">
@@ -555,19 +512,28 @@ export default function AdminPanelPage() {
 
                         <td className="py-3.5 px-4">
                           <span
-                            className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
-                              u.status === 'suspended'
+                              className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
+                              u.status === 'banned'
                                 ? 'bg-rose-100 text-rose-900 border-rose-300'
+                                : u.status === 'suspended'
+                                ? 'bg-amber-100 text-amber-900 border-amber-300'
                                 : 'bg-emerald-100 text-emerald-900 border-emerald-300'
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
-                                u.status === 'suspended' ? 'bg-vermillion' : 'bg-emerald-600'
+                                u.status === 'banned' ? 'bg-vermillion' : u.status === 'suspended' ? 'bg-amber-500' : 'bg-emerald-600'
                               }`}
                             />
                             {u.status || 'active'}
                           </span>
+                        </td>
+
+                        <td className="py-3.5 px-4 font-mono">
+                          <div className="font-semibold text-ink">{u.usage.tokensUsed.toLocaleString()} tokens</div>
+                          <div className="text-[10px] text-ink-muted">
+                            {u.usage.questionsUsed} / {u.usage.questionsLimit} questions · reset {new Date(u.usage.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC
+                          </div>
                         </td>
 
                         <td className="py-3.5 px-4 font-mono">
@@ -582,13 +548,23 @@ export default function AdminPanelPage() {
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
-                          {isCurrentAdmin || isRootEnvAdmin ? (
+                          {isCurrentAdmin || isProtectedAdmin ? (
                             <span className="text-[11px] font-mono text-ink-muted italic">
-                              Protected Root Admin
+                              {u.isSuperAdmin ? 'Protected Super Admin' : 'Protected Admin'}
                             </span>
                           ) : (
                             <div className="flex items-center justify-end gap-2">
-                              {u.status === 'suspended' ? (
+                              {u.status === 'banned' ? (
+                                user?.isSuperAdmin ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmModal({ isOpen: true, type: 'reactivate', targetUser: u })}
+                                    className="px-2.5 py-1 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-900 text-[11px] font-semibold hover:bg-emerald-100 cursor-pointer"
+                                  >
+                                    Unban
+                                  </button>
+                                ) : <span className="text-[10px] text-ink-muted">Super Admin required</span>
+                              ) : u.status === 'suspended' ? (
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -615,6 +591,16 @@ export default function AdminPanelPage() {
                                   className="px-2.5 py-1 rounded-full border border-amber-300 bg-amber-50 text-amber-900 text-[11px] font-semibold hover:bg-amber-100 transition-colors cursor-pointer"
                                 >
                                   Suspend
+                                </button>
+                              )}
+
+                              {u.status !== 'banned' && (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmModal({ isOpen: true, type: 'ban', targetUser: u })}
+                                  className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 text-rose-900 text-[11px] font-semibold hover:bg-rose-100 cursor-pointer"
+                                >
+                                  Ban
                                 </button>
                               )}
 
@@ -645,141 +631,6 @@ export default function AdminPanelPage() {
           )}
         </div>
 
-        {/* ── SYSTEM QUOTAS & POLICY CONTROLS FORM ─────────────────── */}
-        <div className="p-6 sm:p-8 rounded-2xl bg-paper-light border border-border shadow-md space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/80 pb-4">
-            <div>
-              <h2 className="font-heading text-2xl font-bold text-green-deep">
-                {lang === 'bn' ? 'সিস্টেম ব্যবহার কোটা ও সীমাবদ্ধতা' : 'System Quotas & Policy Controls'}
-              </h2>
-              <p className="text-xs sm:text-sm text-ink-muted font-sans mt-0.5">
-                {lang === 'bn'
-                  ? 'এই মান পরিবর্তন করলে তা তাৎক্ষণিকভাবে সকল ব্যবহারকারীর জন্য কার্যকর হবে।'
-                  : 'Modifying these settings immediately reconfigures rate limits across all active advocate sessions.'}
-              </p>
-            </div>
-            <span className="text-xs font-mono text-ink-muted">
-              Source: backend/usage-limit-settings.js
-            </span>
-          </div>
-
-          {limitsLoading ? (
-            <div className="p-12 text-center text-sm font-mono text-ink-muted">
-              Fetching current limit settings from backend...
-            </div>
-          ) : (
-            <form onSubmit={handleSaveLimits} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-
-                {/* Field 1: Questions per minute */}
-                <div className="space-y-2">
-                  <label htmlFor="qpm" className="block text-xs font-mono font-bold uppercase text-ink">
-                    Questions per rolling minute
-                  </label>
-                  <input
-                    id="qpm"
-                    type="number"
-                    min="1"
-                    max="120"
-                    value={limits.questionsPerMinute}
-                    onChange={(e) => setLimits({ ...limits, questionsPerMinute: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink font-mono text-sm focus:outline-hidden focus:border-brass focus:ring-2 focus:ring-brass/30"
-                    required
-                  />
-                  <p className="text-[11px] text-ink-muted font-sans">
-                    Protects against rapid bursting or automated scraping in a 60-second window.
-                  </p>
-                </div>
-
-                {/* Field 2: Questions per day */}
-                <div className="space-y-2">
-                  <label htmlFor="qpd" className="block text-xs font-mono font-bold uppercase text-ink">
-                    Questions per UTC day
-                  </label>
-                  <input
-                    id="qpd"
-                    type="number"
-                    min="1"
-                    max="1000"
-                    value={limits.questionsPerDay}
-                    onChange={(e) => setLimits({ ...limits, questionsPerDay: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink font-mono text-sm focus:outline-hidden focus:border-brass focus:ring-2 focus:ring-brass/30"
-                    required
-                  />
-                  <p className="text-[11px] text-ink-muted font-sans">
-                    Maximum question allowance allocated to each standard user per calendar day.
-                  </p>
-                </div>
-
-                {/* Field 3: Max output tokens */}
-                <div className="space-y-2">
-                  <label htmlFor="mot" className="block text-xs font-mono font-bold uppercase text-ink">
-                    Maximum output tokens per answer
-                  </label>
-                  <input
-                    id="mot"
-                    type="number"
-                    min="100"
-                    max="4096"
-                    step="50"
-                    value={limits.maxOutputTokens}
-                    onChange={(e) => setLimits({ ...limits, maxOutputTokens: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink font-mono text-sm focus:outline-hidden focus:border-brass focus:ring-2 focus:ring-brass/30"
-                    required
-                  />
-                  <p className="text-[11px] text-ink-muted font-sans">
-                    Upper token length cap for assistant statutory explanations.
-                  </p>
-                </div>
-
-                {/* Field 4: Daily token budget */}
-                <div className="space-y-2">
-                  <label htmlFor="dtb" className="block text-xs font-mono font-bold uppercase text-ink">
-                    Daily token budget per user
-                  </label>
-                  <input
-                    id="dtb"
-                    type="number"
-                    min="1000"
-                    max="1000000"
-                    step="5000"
-                    value={limits.dailyTokenBudget}
-                    onChange={(e) => setLimits({ ...limits, dailyTokenBudget: Number(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl border border-border bg-paper text-ink font-mono text-sm focus:outline-hidden focus:border-brass focus:ring-2 focus:ring-brass/30"
-                    required
-                  />
-                  <p className="text-[11px] text-ink-muted font-sans">
-                    Cumulative combined input/output tokens allowed per advocate account daily.
-                  </p>
-                </div>
-
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">
-                <button
-                  type="button"
-                  disabled={!isLimitsDirty}
-                  onClick={() => {
-                    setLimits(initialLimits);
-                    setStatusMessage({ type: 'success', text: 'Discarded unsaved form changes.' });
-                  }}
-                  className="px-5 py-2.5 rounded-full border border-border text-ink hover:bg-paper-dark font-sans text-xs font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  Discard Changes
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={savingLimits || !isLimitsDirty}
-                  className="px-6 py-2.5 rounded-full bg-green-deep hover:bg-green-mid disabled:opacity-40 text-paper font-sans text-xs sm:text-sm font-semibold transition-all shadow-md active:scale-95 cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {savingLimits ? 'Saving to Backend...' : 'Save Usage Limits'}
-                </button>
-              </div>
-            </form>
-          )}
-        </div>
-
         {/* ── RECENT ADMINISTRATIVE ACTIVITY AUDIT TRAIL ──────────── */}
         <div className="p-6 sm:p-8 rounded-2xl bg-paper-light border border-border shadow-xs space-y-4">
           <div className="flex items-center justify-between border-b border-border/80 pb-3">
@@ -788,7 +639,7 @@ export default function AdminPanelPage() {
                 {lang === 'bn' ? 'সাম্প্রতিক প্রশাসনিক অডিট ট্রেইল' : 'Recent Administrative Audit Trail'}
               </h2>
               <p className="text-xs text-ink-muted font-sans">
-                Immutable system event log of user lifecycle modifications and policy updates.
+                Recent administrative changes; login and registration events are shown separately below.
               </p>
             </div>
             <span className="text-xs font-mono text-ink-muted">
@@ -808,8 +659,10 @@ export default function AdminPanelPage() {
             <div className="space-y-2.5">
               {auditLogs.slice(0, 10).map((log) => {
                 const badgeColor =
-                  log.action === 'USER_SUSPENDED'
-                    ? 'bg-amber-100 text-amber-900 border-amber-300'
+                    log.action === 'USER_SUSPENDED'
+                      ? 'bg-amber-100 text-amber-900 border-amber-300'
+                      : log.action === 'USER_BANNED'
+                      ? 'bg-rose-100 text-rose-900 border-rose-300'
                     : log.action === 'USER_DELETED'
                     ? 'bg-rose-100 text-rose-900 border-rose-300'
                     : log.action === 'USER_REACTIVATED'
@@ -837,6 +690,60 @@ export default function AdminPanelPage() {
           )}
         </div>
 
+        <section className="p-6 sm:p-8 rounded-2xl bg-paper-light border border-border shadow-xs space-y-4" aria-labelledby="entry-log-title">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/80 pb-3">
+            <div>
+              <h2 id="entry-log-title" className="font-heading text-xl font-bold text-green-deep">User Entry Log</h2>
+              <p className="text-xs text-ink-muted">Successful registrations and sign-ins, newest first.</p>
+            </div>
+            <button
+              type="button"
+              onClick={refreshEntryLogs}
+              disabled={entryLogsLoading}
+              className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold hover:bg-paper-dark disabled:opacity-50"
+            >
+              {entryLogsLoading ? 'Refreshing…' : 'Refresh'}
+            </button>
+          </div>
+          {entryLogsLoading && entryLogPage.entries.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink-muted">Loading entry history…</p>
+          ) : entryLogPage.total === 0 ? (
+            <p className="py-6 text-center text-sm text-ink-muted">No successful sign-ins or registrations recorded yet.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border text-[10px] font-mono uppercase text-ink-muted">
+                    <th className="py-3 px-3">Account</th>
+                    <th className="py-3 px-3">Event</th>
+                    <th className="py-3 px-3">Timestamp</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {entryLogPage.entries.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="py-3 px-3 font-mono">{entry.username}</td>
+                      <td className="py-3 px-3">{entry.event === 'LOGIN' ? 'Sign in' : 'Registration'}</td>
+                      <td className="py-3 px-3 font-mono text-ink-muted" title={new Date(entry.timestamp).toISOString()}>
+                        {new Date(entry.timestamp).toLocaleString([], { dateStyle: 'medium', timeStyle: 'medium' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {entryLogPage.total > entryPageSize && (
+            <div className="flex items-center justify-between border-t border-border pt-3 text-xs text-ink-muted">
+              <span>{entryPageIndex * entryPageSize + 1}–{Math.min((entryPageIndex + 1) * entryPageSize, entryLogPage.total)} of {entryLogPage.total}</span>
+              <div className="flex gap-2">
+                <button type="button" disabled={entryPageIndex === 0 || entryLogsLoading} onClick={() => void changeEntryPage(entryPageIndex - 1)} className="rounded-full border border-border px-3 py-1.5 disabled:opacity-40">Previous</button>
+                <button type="button" disabled={(entryPageIndex + 1) * entryPageSize >= entryLogPage.total || entryLogsLoading} onClick={() => void changeEntryPage(entryPageIndex + 1)} className="rounded-full border border-border px-3 py-1.5 disabled:opacity-40">Next</button>
+              </div>
+            </div>
+          )}
+        </section>
+
       </div>
 
       {/* ── ACTION CONFIRMATION MODAL ─────────────────────────────── */}
@@ -845,6 +752,7 @@ export default function AdminPanelPage() {
           <div className="max-w-md w-full bg-paper p-6 sm:p-8 rounded-2xl border border-brass shadow-2xl space-y-5">
             <h3 className="font-heading text-lg font-bold text-green-deep">
               {confirmModal.type === 'suspend' && 'Confirm Account Suspension'}
+              {confirmModal.type === 'ban' && 'Confirm Permanent Ban'}
               {confirmModal.type === 'reactivate' && 'Confirm Account Reactivation'}
               {confirmModal.type === 'delete' && 'Confirm Account Permanent Deletion'}
             </h3>
@@ -856,9 +764,14 @@ export default function AdminPanelPage() {
                   <strong className="text-ink">{confirmModal.targetUser.username}</strong>? This user will be immediately logged out, active session tokens will be revoked, and further access to the examination suite will be blocked.
                 </>
               )}
+              {confirmModal.type === 'ban' && (
+                <>
+                  Ban <strong className="text-ink">{confirmModal.targetUser.username}</strong>? This blocks sign-in and revokes every active session. Only a Super Admin can later lift the ban.
+                </>
+              )}
               {confirmModal.type === 'reactivate' && (
                 <>
-                  Are you sure you want to reactivate{' '}
+                  Are you sure you want to {confirmModal.targetUser.status === 'banned' ? 'unban' : 'reactivate'}{' '}
                   <strong className="text-ink">{confirmModal.targetUser.username}</strong>? The user will be permitted to sign in and resume statutory inquiries.
                 </>
               )}
@@ -886,7 +799,7 @@ export default function AdminPanelPage() {
                 className={`px-5 py-2 rounded-full text-paper font-sans text-xs font-semibold shadow-sm transition-all cursor-pointer ${
                   confirmModal.type === 'delete'
                     ? 'bg-vermillion hover:bg-rose-700'
-                    : confirmModal.type === 'suspend'
+                    : confirmModal.type === 'suspend' || confirmModal.type === 'ban'
                     ? 'bg-amber-600 hover:bg-amber-700'
                     : 'bg-green-deep hover:bg-green-mid'
                 }`}

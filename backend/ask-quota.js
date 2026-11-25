@@ -1,7 +1,7 @@
 const { randomUUID } = require('node:crypto');
 const RequestError = require('./request-error');
 const { getUsageLimits } = require('./usage-limit-settings');
-const { runQuotaScript } = require('./quota-redis');
+const { runQuotaScript, getDailyQuota } = require('./quota-redis');
 
 const minuteMs = 60_000;
 const dayMs = 86_400_000;
@@ -117,7 +117,12 @@ async function applyQuota(userId, action, reservationId = '', estimatedInputToke
       day.questions += 1;
       if (action === 'reserve') day.tokens += reservedTokens;
     }
-    return { dayKey: '', resetAt: day.resetAt, maxOutputTokens };
+    return {
+      dayKey: '',
+      resetAt: day.resetAt,
+      maxOutputTokens,
+      reservedTokens: action === 'reserve' ? reservedTokens : 0,
+    };
   }
 
   // A hash tag keeps both keys on the same shard on clustered Redis.
@@ -128,7 +133,12 @@ async function applyQuota(userId, action, reservationId = '', estimatedInputToke
   ]);
   switch (decision) {
     case 'ok':
-      return { dayKey, resetAt, maxOutputTokens };
+      return {
+        dayKey,
+        resetAt,
+        maxOutputTokens,
+        reservedTokens: action === 'reserve' ? estimatedInputTokens + maxOutputTokens : 0,
+      };
     case 'daily_questions':
       throw new AskQuotaError('daily_questions', questionLimitMessage(questionsPerDay, 'day'), resetAt);
     case 'question_too_large':
@@ -154,16 +164,20 @@ async function reserveAsk(userId, messages) {
   // The free router can select different tokenizers, so use a conservative UTF-8 byte estimate.
   const estimatedInputTokens = Buffer.byteLength(JSON.stringify(messages), 'utf8') + 8 * messages.length;
   const reservationId = randomUUID();
-  const { dayKey, resetAt, maxOutputTokens } = await applyQuota(userId, 'reserve', reservationId, estimatedInputTokens);
+  const { dayKey, resetAt, maxOutputTokens, reservedTokens } = await applyQuota(userId, 'reserve', reservationId, estimatedInputTokens);
 
   async function reconcileUsage(usage) {
-    if (!dayKey) return;
     const total = reportedCount(usage?.total_tokens);
     const prompt = reportedCount(usage?.prompt_tokens);
     const completion = reportedCount(usage?.completion_tokens);
     const used = total === null
       ? (prompt ?? estimatedInputTokens) + (completion ?? maxOutputTokens)
       : Math.max(total, (prompt ?? 0) + (completion ?? 0));
+    if (!dayKey) {
+      const day = usageByUser.get(userId)?.day;
+      if (day?.resetAt === resetAt) day.tokens = Math.max(0, day.tokens - reservedTokens + used);
+      return;
+    }
     try {
       await runQuotaScript(applyReportedUsage, [dayKey], [resetAt, reservationId, Math.min(used, Number.MAX_SAFE_INTEGER)]);
     } catch {
@@ -186,20 +200,30 @@ function sendAskQuotaError(error, response) {
   return true;
 }
 
-function getUserUsage(userId) {
+async function getUserUsage(userId) {
   const limits = getUsageLimits();
-  const account = usageByUser.get(userId);
   const now = Date.now();
-  const day = account?.day && account.day.resetAt > now
-    ? account.day
-    : { questions: 0, tokens: 0, resetAt: Math.floor(now / dayMs) * dayMs + dayMs };
+  const resetAt = Math.floor(now / dayMs) * dayMs + dayMs;
+  let questions = 0;
+  let tokens = 0;
+
+  if (process.env.REDIS_URL?.trim()) {
+    [questions, tokens] = await getDailyQuota(userId, resetAt);
+  } else {
+    const day = usageByUser.get(userId)?.day;
+    if (day?.resetAt > now) {
+      questions = day.questions;
+      tokens = day.tokens;
+    }
+  }
+
   return {
-    questionsUsed: day.questions,
+    questionsUsed: Number(questions) || 0,
     questionsLimit: limits.questionsPerDay,
-    tokensUsed: day.tokens,
+    tokensUsed: Number(tokens) || 0,
     tokensLimit: limits.dailyTokenBudget,
     questionsPerMinute: limits.questionsPerMinute,
-    resetAt: new Date(day.resetAt).toISOString(),
+    resetAt: new Date(resetAt).toISOString(),
   };
 }
 

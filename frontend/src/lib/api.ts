@@ -25,6 +25,8 @@ import type {
   ServerUsageLimits,
   ServerAdminUser,
   ServerAuditLog,
+  ServerAccessLogPage,
+  ServerLegalCollectionStatus,
 } from '@/types/server';
 
 export * from '@/types/server';
@@ -314,7 +316,7 @@ export const serverApi = {
       return apiRequest<ServerAdminUser[]>('/api/admin/users');
     },
 
-    async updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<ServerAdminUser> {
+    async updateUserStatus(id: string, status: 'active' | 'suspended' | 'banned'): Promise<ServerAdminUser> {
       return apiRequest<ServerAdminUser>(`/api/admin/users/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -330,6 +332,22 @@ export const serverApi = {
 
     async getAuditLogs(): Promise<ServerAuditLog[]> {
       return apiRequest<ServerAuditLog[]>('/api/admin/audit-logs');
+    },
+
+    async getEntryLogs(limit = 50, offset = 0): Promise<ServerAccessLogPage> {
+      return apiRequest<ServerAccessLogPage>(`/api/admin/entry-logs?limit=${limit}&offset=${offset}`);
+    },
+
+    async getRagStatus(): Promise<ServerLegalCollectionStatus> {
+      return apiRequest<ServerLegalCollectionStatus>('/api/admin/rag/status');
+    },
+
+    async seedLegalCorpus(corpus: unknown[]): Promise<{ indexedPoints: number }> {
+      return apiRequest<{ indexedPoints: number }>('/api/admin/rag/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ corpus }),
+      });
     },
   },
 };

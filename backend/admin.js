@@ -8,6 +8,9 @@ const {
   getAuditLogs,
 } = require('./auth');
 const { getUserChatCount, deleteUserChats } = require('./chats');
+const chatStore = require('./chat-store');
+const { getUserUsage } = require('./ask-quota');
+const { getLegalCollectionStatus, ingestLegalCorpus } = require('./legal-retrieval');
 const { getUsageLimits, saveUsageLimits } = require('./usage-limit-settings');
 const RequestError = require('./request-error');
 
@@ -20,11 +23,12 @@ router.use(requireUser, (_request, response, next) => {
   next();
 });
 
-router.get('/users', (_request, response) => {
-  const users = listUsers().map(user => ({
+router.get('/users', async (_request, response) => {
+  const users = await Promise.all(listUsers().map(async user => ({
     ...user,
     chatCount: typeof getUserChatCount === 'function' ? getUserChatCount(user.id) : 0,
-  }));
+    usage: await getUserUsage(user.id),
+  })));
   response.json(users);
 });
 
@@ -37,7 +41,7 @@ router.patch('/users/:id/status', express.json({ limit: '4kb' }), (request, resp
     throw new RequestError(400, 'You cannot suspend or modify the status of your own account.');
   }
 
-  const updated = updateUserStatus(targetUserId, status, currentAdmin.id);
+  const updated = updateUserStatus(targetUserId, status, currentAdmin.id, currentAdmin.isSuperAdmin);
   response.json(updated);
 });
 
@@ -58,6 +62,27 @@ router.delete('/users/:id', (request, response) => {
 
 router.get('/audit-logs', (_request, response) => {
   response.json(getAuditLogs());
+});
+
+router.get('/entry-logs', (request, response) => {
+  const requestedLimit = Number.parseInt(request.query.limit, 10);
+  const requestedOffset = Number.parseInt(request.query.offset, 10);
+  response.json(chatStore.listAccessEvents(requestedLimit, requestedOffset));
+});
+
+router.get('/rag/status', async (_request, response) => {
+  response.json(await getLegalCollectionStatus());
+});
+
+router.post('/rag/seed', express.json({ limit: '10mb' }), async (request, response) => {
+  const { corpus } = request.body ?? {};
+  const indexedPoints = await ingestLegalCorpus(corpus);
+  recordAuditLog({
+    action: 'RAG_INGESTED',
+    adminId: response.locals.user.id,
+    details: `Indexed ${indexedPoints} verified legal passage records`,
+  });
+  response.status(201).json({ indexedPoints });
 });
 
 router.get('/usage-limits', (_request, response) => {

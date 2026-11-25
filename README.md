@@ -180,7 +180,7 @@ Key variables:
 - `QDRANT_LEGAL_COLLECTION=nothi-legal-official` (Qdrant statutory collection)
 
 **Configure Admin & Normal User Accounts**:
-The authentication system dynamically creates and hashes local development accounts from `.env` on startup:
+There is no hard-coded administrator login. The backend creates and hashes the administrator account from `ADMIN_EMAIL` and `ADMIN_PASSWORD` at startup. Set these in `backend/.env` for local use or as backend environment variables in Dokploy. The account ID is `env-admin`; the repository contains only example credentials and no live admin password.
 ```ini
 # Administrative account (access to /api/admin/* and usage controls)
 ADMIN_EMAIL=admin
@@ -190,6 +190,8 @@ ADMIN_PASSWORD=AdminPassword123!
 USER_EMAIL=user
 USER_PASSWORD=UserPassword123!
 ```
+
+The Admin Settings screen at `/admin/settings` can seed Qdrant with an approved JSON/JSONL corpus. Do not seed `frontend/src/data/laws_corpus.json`; it contains placeholder entries and is not a verified RAG source.
 
 ### Step 3: Run the Monorepo
 Start both the Next.js frontend (`:3000`) and the Node.js backend (`:3001`) simultaneously:

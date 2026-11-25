@@ -133,6 +133,10 @@ function pointsFromCorpus(corpus) {
 
   const points = new Map();
   for (const [index, entry] of corpus.entries()) {
+    if ((typeof entry?.passage === 'string' && /^\s*placeholder\s*:/iu.test(entry.passage)) ||
+        (typeof entry?.version === 'string' && /^placeholder(?:-|$)/iu.test(entry.version))) {
+      throw new RequestError(400, `Corpus entry ${index + 1} contains placeholder text and cannot be indexed.`);
+    }
     const source = {};
     for (const field of sourceFields) {
       const value = entry?.[field];
@@ -223,6 +227,17 @@ async function listCollections() {
     throw new RequestError(502, 'Qdrant Cloud did not return a usable collection list.');
   }
   return result.collections.map(entry => entry.name);
+}
+
+async function getLegalCollectionStatus() {
+  const path = collectionPath();
+  const collection = process.env.QDRANT_LEGAL_COLLECTION?.trim() || 'nothi-legal';
+  const result = await qdrantRequest(path, { ignoreStatus: 404 });
+  return {
+    collection,
+    exists: Boolean(result),
+    points: result?.points_count ?? 0,
+  };
 }
 
 async function ensureCollection(path) {
@@ -397,4 +412,4 @@ async function searchLegal(question) {
   return assemblePassages(path, result.points.slice(0, candidateLimit).map(parseHit).filter(Boolean));
 }
 
-module.exports = { ingestLegalCorpus, listCollections, replaceLegalSection, searchLegal };
+module.exports = { getLegalCollectionStatus, ingestLegalCorpus, listCollections, replaceLegalSection, searchLegal };

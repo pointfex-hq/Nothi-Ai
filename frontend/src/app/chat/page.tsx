@@ -1172,6 +1172,13 @@ export default function ChatPage() {
           </Link>
         </div>
 
+        <nav aria-label="Workspace navigation" className="hidden items-center gap-2 lg:flex">
+          <Link href={user?.role === 'admin' ? '/admin' : '/dashboard'} className="rounded-full px-3 py-2 text-xs font-medium text-ink-muted hover:bg-paper-dark hover:text-ink">
+            {user?.role === 'admin' ? 'Admin' : 'Dashboard'}
+          </Link>
+          <Link href="/audit" className="rounded-full px-3 py-2 text-xs font-medium text-ink-muted hover:bg-paper-dark hover:text-ink">Audit</Link>
+        </nav>
+
         {/* Center: Quiet 28 Verified Sections Link */}
         <div className="hidden md:flex items-center">
           <button
@@ -1348,6 +1355,12 @@ export default function ChatPage() {
 
             {/* Sidebar Safe Footer: One disclaimer text link only (laws_corpus.json) */}
             <div className="p-4 border-t border-border/80 text-center pb-8 safe-bottom">
+              <div className="mb-3 flex justify-center gap-3 text-xs font-semibold">
+                <Link href={user?.role === 'admin' ? '/admin' : '/dashboard'} className="text-green-deep hover:underline">
+                  {user?.role === 'admin' ? 'Admin' : 'Dashboard'}
+                </Link>
+                <Link href="/audit" className="text-green-deep hover:underline">Audit</Link>
+              </div>
               <button
                 type="button"
                 onClick={() => setCorpusListOpen(true)}

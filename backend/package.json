@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node index.js",
     "dev": "node --watch --watch-path=index.js --watch-path=admin.js --watch-path=ask-quota.js --watch-path=ask.js --watch-path=audit.js --watch-path=auth.js --watch-path=chat-statutory.js --watch-path=chat-store.js --watch-path=chats.js --watch-path=legal-retrieval.js --watch-path=local-data.js --watch-path=ocr.js --watch-path=pdf.js --watch-path=quota-redis.js --watch-path=request-error.js --watch-path=usage-limit-settings.js index.js",
-    "test": "node --check index.js && node --check chat-store.js && node --check quota-redis.js && node --check legal-retrieval.js && node --check ask.js && node --check chats.js"
+    "test": "node --check index.js && node --check auth.js && node --check admin.js && node --check chat-store.js && node --check ask-quota.js && node --check quota-redis.js && node --check legal-retrieval.js && node --check ask.js && node --check chats.js && node --test test/admin.test.js"
   },
   "keywords": [],
   "author": "",
