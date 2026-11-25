@@ -44,7 +44,7 @@ export function DocumentInspectorCard({
         { labelEn: 'Buyer (ক্রেতা)', value: 'Mohammad Hasan (মোহাম্মদ হাসান)', flag: null, mono: false },
         {
           labelEn: 'Time Window (নিবন্ধন কাল)',
-          value: packet === 'B' ? '135 Days (Exceeds 4-month limit)' : '28 Days (Compliant window)',
+          value: packet === 'B' ? '136 Days (Section 25 review required)' : '28 Days (Within ordinary 3-month period)',
           flag: packet === 'B' ? 'RED DEFECT: SEC. 23 REGISTRATION ACT 1908' : 'COMPLIANT',
           isDefect: packet === 'B',
           mono: true,

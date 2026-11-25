@@ -2,7 +2,7 @@
 
 ## Configure Qdrant Cloud
 
-1. In the Qdrant Cloud console, copy the cluster’s HTTPS endpoint into `QDRANT_URL` and a database API key with permission to create collections, write points, and query into `QDRANT_API_KEY`. Add both to the private `server/.env` alongside `OPENROUTER_API_KEY`. [Qdrant Cloud connection and database keys](https://qdrant.tech/documentation/cloud/authentication/)
+1. In the Qdrant Cloud console, copy the cluster’s HTTPS endpoint into `QDRANT_URL` and a database API key with permission to create collections, write points, and query into `QDRANT_API_KEY`. Add both to the private `backend/.env` alongside `OPENROUTER_API_KEY`. [Qdrant Cloud connection and database keys](https://qdrant.tech/documentation/cloud/authentication/)
 2. Enable **Inference** for your cluster. Ingestion creates the `nothi-legal` collection when needed, with 384-dimensional cosine vectors. Ingestion and search both use `intfloat/multilingual-e5-small` through Cloud Inference. [Qdrant Cloud Inference](https://qdrant.tech/documentation/cloud/inference/)
 
 ## Prepare the corpus
@@ -25,18 +25,22 @@ Supply UTF-8 JSON or JSON Lines. Use one object per official passage, with these
 | `closingNoteStartsWith` | With clause splitting enabled, the exact line prefix that marks a standalone closing note, if one exists. |
 | `retrieveTogether` | With clause splitting enabled, link two to four short subsections so they appear together with separate citations. |
 
-Omit unavailable optional fields. Keep the local corpus under the Git-ignored `server/data/` directory. Ingestion splits long passages into contiguous excerpts and preserves their original wording. Each Qdrant point stores the excerpt and citation fields in its payload. Ingesting the same file again updates the same points. To replace a corpus without mixing versions, set `QDRANT_LEGAL_COLLECTION` to a new collection name, ingest the replacement, and restart Express.
+Omit unavailable optional fields. Keep a local corpus under the Git-ignored `backend/data/` directory. Ingestion splits long passages into contiguous excerpts and preserves their original wording. Each Qdrant point stores the excerpt and citation fields in its payload. Ingesting the same file again updates the same points. To replace a corpus without mixing versions, set `QDRANT_LEGAL_COLLECTION` to a new collection name, ingest the replacement, and restart Express.
 
 ## Ingest and verify
+
+An administrator can also open `/admin/settings` and upload a JSON or JSON Lines corpus to seed the configured Qdrant collection. The ingestion validates required source metadata and rejects placeholder passage text. The bundled frontend citation catalog is not an approved RAG corpus.
+
+The repository includes a small, official-text starter seed for Registration Act Sections 23–25. Section 23 reflects the three-month period substituted by the 2004 amendment; Sections 24–25 are included to preserve the separate-execution rule and conditional late-presentation exception. Run `npm --prefix backend run seed:legal` to reconcile those sections into the configured collection, or use the **Seed bundled verified starter** action in Admin Settings. This is a starter corpus, not a complete 28-entry catalog; upload additional verified source text to broaden coverage.
 
 Run from the repository root in PowerShell. Replace the quoted values with a known question and the exact `section` and `lawTitle` values from your corpus.
 
 ```powershell
-node .\server\scripts\legal.js collections
-node .\server\scripts\legal.js ingest .\server\data\legal-corpus.jsonl
-node .\server\scripts\legal.js replace-section .\server\data\legal-corpus.jsonl "55" "The Transfer of Property Act, 1882"
-node .\server\scripts\legal.js replace-section .\server\data\legal-corpus.jsonl "17A" "The Registration Act, 1908"
-node .\server\scripts\legal.js search "Your known question" "Expected section" "Expected law title"
+node .\backend\scripts\legal.js collections
+node .\backend\scripts\legal.js ingest .\backend\data\legal-corpus.jsonl
+node .\backend\scripts\legal.js replace-section .\backend\data\legal-corpus.jsonl "55" "The Transfer of Property Act, 1882"
+node .\backend\scripts\legal.js replace-section .\backend\data\legal-corpus.jsonl "17A" "The Registration Act, 1908"
+node .\backend\scripts\legal.js search "Your known question" "Expected section" "Expected law title"
 ```
 
 Use `collections` to confirm the backend can access your cluster. Use `replace-section` after changing an indexed section’s text or layout. It replaces records for the matching act, jurisdiction, section, and source URL. Search considers up to 40 candidates and returns five ranked excerpts at most, plus any linked subsections. When a selected clause spans multiple fragments, search puts those fragments back in order before returning the excerpt. The optional expected section and law title make search exit with an error if the provision is absent from the results. For a bilingual corpus, repeat the search with known Bangla and English questions.

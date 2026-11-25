@@ -68,9 +68,9 @@ router.get('/', (_request, response) => {
   response.json(chatStore.listChats(response.locals.user.id));
 });
 
-router.get('/quota', (_request, response) => {
+router.get('/quota', async (_request, response) => {
   const userId = response.locals.user.id;
-  response.json(getUserUsage(userId));
+  response.json(await getUserUsage(userId));
 });
 
 router.post('/', readJson, (request, response) => {

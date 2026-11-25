@@ -11,6 +11,7 @@ export interface NothiUser {
   barNumber?: string;
   plan?: 'free' | 'basic' | 'pro';
   role: 'admin' | 'user';
+  isSuperAdmin?: boolean;
 }
 
 const STORAGE_KEY = 'nothi_ai_user_v1';
@@ -122,6 +123,7 @@ export function useAuth() {
             chamber: current?.chamber || (serverUser.role === 'admin' ? 'Chamber Administrator' : 'Chamber Counsel'),
             plan: serverUser.role === 'admin' ? 'pro' : 'basic',
             role: serverUser.role,
+            isSuperAdmin: serverUser.isSuperAdmin,
           };
           setStoredUser(updated);
         } else if (getStoredUser()) {
@@ -150,6 +152,7 @@ export function useAuth() {
       chamber: credentials.chamber || (serverUser.role === 'admin' ? 'Chamber Administrator' : 'Chamber Counsel'),
       plan: serverUser.role === 'admin' ? 'pro' : 'basic',
       role: serverUser.role,
+      isSuperAdmin: serverUser.isSuperAdmin,
     };
 
     setStoredUser(authUser);

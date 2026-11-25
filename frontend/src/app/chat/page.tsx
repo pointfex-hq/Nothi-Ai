@@ -27,9 +27,11 @@ import { SignInModal } from '@/components/auth/SignInModal';
 import { sendChatMessage, ChatMessage, ChatAttachment, ChatCitation } from '@/lib/chat';
 import { hasMarkdownStructure, generateFilenameFromHeading } from '@/lib/markdown';
 import { serverApi, ServerChatMessage } from '@/lib/api';
+import { getVerifiedCorpusSections } from '@/lib/citations';
 import type { CorpusSection } from '@/types';
 
 export type AskMode = 'legal' | 'document' | 'statutory';
+const verifiedSourceCount = getVerifiedCorpusSections().length;
 
 interface ChatSession {
   id: string;
@@ -87,8 +89,8 @@ const SAMPLE_DOCS = [
     size: 420 * 1024,
     labelEn: 'Sample Deed (Saf Kabala)',
     labelBn: 'নমুনা সাফ কবলা দলিল',
-    queryEn: 'Verify Section 23 4-month presentation window and compulsory registration for this deed.',
-    queryBn: 'এই দলিলের ৪ মাসের রেজিস্ট্রেশন সময়সীমা ও ধারা ১৭ এর শর্তাবলি পরীক্ষা করুন।',
+    queryEn: 'Verify the ordinary 3-month Section 23 presentation window and compulsory registration for this deed.',
+    queryBn: 'এই দলিলের সাধারণ ৩ মাসের ধারা ২৩ সময়সীমা ও ধারা ১৭ এর শর্তাবলি পরীক্ষা করুন।',
   },
   {
     name: 'RS_Khatian_Ledger_104.png',
@@ -1172,16 +1174,23 @@ export default function ChatPage() {
           </Link>
         </div>
 
-        {/* Center: Quiet 28 Verified Sections Link */}
+        <nav aria-label="Workspace navigation" className="hidden items-center gap-2 lg:flex">
+          <Link href={user?.role === 'admin' ? '/admin' : '/dashboard'} className="rounded-full px-3 py-2 text-xs font-medium text-ink-muted hover:bg-paper-dark hover:text-ink">
+            {user?.role === 'admin' ? 'Admin' : 'Dashboard'}
+          </Link>
+          <Link href="/audit" className="rounded-full px-3 py-2 text-xs font-medium text-ink-muted hover:bg-paper-dark hover:text-ink">Audit</Link>
+        </nav>
+
+        {/* Center: Verified source catalog link */}
         <div className="hidden md:flex items-center">
           <button
             type="button"
             onClick={() => setCorpusListOpen(true)}
             className="inline-flex items-center gap-2 text-xs font-sans text-ink-muted hover:text-green-deep transition-colors cursor-pointer px-3 py-1.5 rounded-full hover:bg-paper-dark/60"
-            title="View 28 verified sections from laws_corpus.json"
+            title="View verified legal source entries"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-green-deep" />
-            <span>28 verified sections</span>
+            <span>{verifiedSourceCount} verified sources</span>
           </button>
         </div>
 
@@ -1203,9 +1212,9 @@ export default function ChatPage() {
             type="button"
             onClick={() => setCorpusListOpen(true)}
             className="md:hidden text-xs font-sans text-ink-muted hover:text-green-deep transition-colors cursor-pointer"
-            title="View 28 verified sections"
+            title="View verified legal sources"
           >
-            28 sections
+            {verifiedSourceCount} sources
           </button>
 
           {/* Single Header EN / বাং Language Toggle */}
@@ -1348,6 +1357,12 @@ export default function ChatPage() {
 
             {/* Sidebar Safe Footer: One disclaimer text link only (laws_corpus.json) */}
             <div className="p-4 border-t border-border/80 text-center pb-8 safe-bottom">
+              <div className="mb-3 flex justify-center gap-3 text-xs font-semibold">
+                <Link href={user?.role === 'admin' ? '/admin' : '/dashboard'} className="text-green-deep hover:underline">
+                  {user?.role === 'admin' ? 'Admin' : 'Dashboard'}
+                </Link>
+                <Link href="/audit" className="text-green-deep hover:underline">Audit</Link>
+              </div>
               <button
                 type="button"
                 onClick={() => setCorpusListOpen(true)}
@@ -1380,7 +1395,7 @@ export default function ChatPage() {
                   <p className="font-sans text-base text-ink-muted leading-relaxed">
                     {lang === 'bn'
                       ? 'উত্তর কেবল বাংলাদেশ ভূমি আইনের ২৮টি যাচাইকৃত ধারার ভিত্তিতে দেওয়া হয়।'
-                      : 'Answers come only from 28 verified sections of Bangladeshi property law.'}
+                      : `Answers use currently verified Bangladeshi property-law sources (${verifiedSourceCount} sections).`}
                   </p>
                 </div>
 

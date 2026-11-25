@@ -57,6 +57,14 @@ export function getCorpusSectionById(id: string): CorpusSection | undefined {
   return corpusMap.get(canonical);
 }
 
+function isVerifiedEntry(section: CorpusSection | undefined): section is CorpusSection {
+  return Boolean(section && section.version.startsWith('verified-') && !/^\s*PLACEHOLDER\s*:/iu.test(section.text));
+}
+
+export function getVerifiedCorpusSections(): CorpusSection[] {
+  return [...corpusMap.values()].filter(isVerifiedEntry);
+}
+
 /**
  * Filters an array of citations, keeping only those whose IDs exist in laws_corpus.json.
  * Unknown IDs are silently stripped and logged to console.
@@ -64,11 +72,10 @@ export function getCorpusSectionById(id: string): CorpusSection | undefined {
 export function filterValidCitations(citations: Citation[]): Citation[] {
   return citations.filter((citation) => {
     const canonical = resolveCanonicalId(citation.id);
-    const exists = corpusMap.has(canonical);
+    const exists = isVerifiedEntry(corpusMap.get(canonical));
     if (!exists) {
       console.warn(
-        `[citation-filter] Unknown citation ID "${citation.id}" stripped. ` +
-        `This ID does not exist in laws_corpus.json.`
+        `[citation-filter] Unknown or unverified citation ID "${citation.id}" stripped.`
       );
     }
     return exists;
@@ -87,5 +94,5 @@ export function getAllCorpusSections(): CorpusSection[] {
  */
 export function isValidCitationId(id: string): boolean {
   const canonical = resolveCanonicalId(id);
-  return corpusMap.has(canonical);
+  return isVerifiedEntry(corpusMap.get(canonical));
 }

@@ -222,7 +222,7 @@ export function CitationGateSection() {
 
           <p className="text-base sm:text-lg text-ink-muted font-sans leading-relaxed">
             In property title vetting, fabricated statutory citations create fatal title liabilities.
-            Nothi AI deterministically verifies every finding against our 28-section statutory corpus before it is ever shown to a lawyer.
+            Nothi AI checks citations against source-verified corpus entries and excludes placeholder text before displaying a citation.
           </p>
         </div>
 
@@ -245,7 +245,7 @@ export function CitationGateSection() {
                 Statutory Checkpoint
               </span>
               <span className="text-xs text-brass-light font-mono px-2 py-0.5 rounded-xs bg-brass/15 border border-brass/30">
-                28 Sections • 4 Acts
+                Verified sources only
               </span>
             </div>
 

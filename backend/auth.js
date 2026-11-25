@@ -2,6 +2,7 @@ const express = require('express');
 const { randomBytes, randomUUID, scrypt, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
 const { accountsFile, auditLogsFile, readLocalJson, writeLocalJson } = require('./local-data');
+const chatStore = require('./chat-store');
 const RequestError = require('./request-error');
 
 const router = express.Router();
@@ -19,6 +20,15 @@ const deriveKey = promisify(scrypt);
 const hashOptions = { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 };
 const fallbackSalt = randomBytes(16);
 const fallbackHash = randomBytes(64);
+
+function isSuperAdmin(account) {
+  const username = account.username.toLowerCase();
+  const id = account.id.toLowerCase();
+  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
+  return (account.isEnvAccount && account.role === 'admin') ||
+    (adminEmail && username === adminEmail) ||
+    adminIds.has(id) || adminIds.has(username);
+}
 
 function readAccounts() {
   try {
@@ -99,8 +109,17 @@ async function initializeEnvUsers() {
   }
 }
 
-initializeEnvUsers().catch(err => {
+let envUsersInitializationError;
+const envUsersReady = initializeEnvUsers().catch(err => {
+  envUsersInitializationError = err;
   console.warn('Could not initialize environment users:', err.message);
+});
+
+router.use((_request, _response, next) => {
+  envUsersReady.then(() => {
+    if (envUsersInitializationError) throw new RequestError(503, 'Account provisioning could not be completed.');
+    next();
+  }).catch(next);
 });
 
 function getCredentials(request) {
@@ -117,12 +136,8 @@ function getCredentials(request) {
 }
 
 function publicUser(account) {
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const isAdmin =
-    account.role === 'admin' ||
-    (adminEmail && account.username.toLowerCase() === adminEmail) ||
-    adminIds.has(account.id.toLowerCase()) ||
-    adminIds.has(account.username.toLowerCase());
+  const superAdmin = isSuperAdmin(account);
+  const isAdmin = account.role === 'admin' || superAdmin;
 
   return {
     id: account.id,
@@ -133,6 +148,7 @@ function publicUser(account) {
     status: account.status || 'active',
     createdAt: account.createdAt || Date.now(),
     isEnvAccount: Boolean(account.isEnvAccount),
+    isSuperAdmin: Boolean(superAdmin),
   };
 }
 
@@ -149,7 +165,7 @@ function currentUser(request) {
     return null;
   }
   const account = accounts.get(session.user.username.toLowerCase());
-  if (!account || account.status === 'suspended') {
+  if (!account || account.status === 'suspended' || account.status === 'banned') {
     sessions.delete(token);
     return null;
   }
@@ -200,10 +216,13 @@ function requireUser(request, response, next) {
     return response.status(401).json({ error: 'Your account no longer exists.' });
   }
 
-  if (account.status === 'suspended') {
+  if (account.status === 'suspended' || account.status === 'banned') {
     sessions.delete(token);
     response.clearCookie(sessionCookie, cookieOptions(request));
-    return response.status(403).json({ error: 'Your account has been suspended by an administrator.' });
+    const message = account.status === 'banned'
+      ? 'Your account has been banned by an administrator.'
+      : 'Your account has been suspended by an administrator.';
+    return response.status(403).json({ error: message });
   }
 
   response.locals.user = publicUser(account);
@@ -228,6 +247,7 @@ async function handleRegister(request, response) {
     isEnvAccount: false,
   };
   saveAccount(account);
+  recordAccessEvent(account, 'REGISTERED');
   startSession(request, response, account, 201);
 }
 
@@ -240,10 +260,22 @@ async function handleSignIn(request, response) {
   if (!timingSafeEqual(hash, expected) || !account) {
     throw new RequestError(401, 'The username or password is incorrect.');
   }
-  if (account.status === 'suspended') {
-    throw new RequestError(403, 'Your account has been suspended by an administrator.');
+  if (account.status === 'suspended' || account.status === 'banned') {
+    const message = account.status === 'banned'
+      ? 'Your account has been banned by an administrator.'
+      : 'Your account has been suspended by an administrator.';
+    throw new RequestError(403, message);
   }
+  recordAccessEvent(account, 'LOGIN');
   startSession(request, response, account, 200);
+}
+
+function recordAccessEvent(account, event) {
+  try {
+    chatStore.recordAccessEvent({ userId: account.id, username: account.username, event });
+  } catch (error) {
+    console.error('Could not persist user access event:', error.message);
+  }
 }
 
 function handleSignOut(request, response) {
@@ -333,24 +365,29 @@ function listUsers() {
   return [...accounts.values()].map(publicUser);
 }
 
-function updateUserStatus(userId, status, actorId) {
+function updateUserStatus(userId, status, actorId, actorIsSuperAdmin = false) {
   const account = [...accounts.values()].find(a => a.id === userId);
   if (!account) throw new RequestError(404, 'User account not found.');
 
-  if (account.isEnvAccount && account.role === 'admin') {
-    throw new RequestError(400, 'Cannot modify status of root environment administrator.');
+  if (account.role !== 'user' || isSuperAdmin(account)) {
+    throw new RequestError(400, 'Administrator accounts are protected from user lifecycle actions.');
   }
 
-  if (status !== 'active' && status !== 'suspended') {
-    throw new RequestError(400, 'Status must be active or suspended.');
+  if (!['active', 'suspended', 'banned'].includes(status)) {
+    throw new RequestError(400, 'Status must be active, suspended, or banned.');
+  }
+  if (account.status === 'banned' && status !== 'banned' && !actorIsSuperAdmin) {
+    throw new RequestError(403, 'Only a Super Admin can unban an account.');
   }
 
   account.status = status;
   accounts.set(account.username.toLowerCase(), account);
   writeLocalJson(accountsFile, [...accounts.values()]);
 
+  if (status !== 'active') revokeUserSessions(userId);
+
   recordAuditLog({
-    action: status === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
+    action: status === 'banned' ? 'USER_BANNED' : status === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
     adminId: actorId,
     targetId: userId,
     details: `Account ${account.username} marked ${status}`,
@@ -363,23 +400,15 @@ function deleteUser(userId, actorId) {
   const account = [...accounts.values()].find(a => a.id === userId);
   if (!account) throw new RequestError(404, 'User account not found.');
 
-  if (account.isEnvAccount) {
-    throw new RequestError(400, 'Cannot delete an environment-provisioned account.');
-  }
-
-  if (account.role === 'admin') {
-    throw new RequestError(400, 'Cannot delete administrator accounts.');
+  if (account.role !== 'user' || account.isEnvAccount || isSuperAdmin(account)) {
+    throw new RequestError(400, 'Administrator and environment-provisioned accounts cannot be deleted.');
   }
 
   accounts.delete(account.username.toLowerCase());
   writeLocalJson(accountsFile, [...accounts.values()]);
 
   // Invalidate any active sessions
-  for (const [token, sess] of sessions.entries()) {
-    if (sess.user.id === userId || sess.user.username.toLowerCase() === account.username.toLowerCase()) {
-      sessions.delete(token);
-    }
-  }
+  revokeUserSessions(userId, account.username);
 
   recordAuditLog({
     action: 'USER_DELETED',
@@ -389,6 +418,14 @@ function deleteUser(userId, actorId) {
   });
 
   return { success: true, id: userId };
+}
+
+function revokeUserSessions(userId, username) {
+  for (const [token, session] of sessions) {
+    if (session.user.id === userId || (username && session.user.username.toLowerCase() === username.toLowerCase())) {
+      sessions.delete(token);
+    }
+  }
 }
 
 // ── Admin Audit Logging Store ───
