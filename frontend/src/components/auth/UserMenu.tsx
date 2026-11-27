@@ -34,39 +34,42 @@ export function UserMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
   const triggerButtonRef = useRef<HTMLButtonElement>(null);
 
-  // Sync initial user name when modal opens
-  useEffect(() => {
-    if (settingsOpen && user) {
-      setEditName(user.name);
-      setSaveStatus('idle');
-    }
-  }, [settingsOpen, user]);
+  const handleOpenSettings = useCallback(() => {
+    setDropdownOpen(false);
+    setEditName(user?.name || '');
+    setSaveStatus('idle');
+    setSettingsOpen(true);
+  }, [user]);
+
+  const handleOpenSession = useCallback(() => {
+    setDropdownOpen(false);
+    setCacheCleared(false);
+    setSessionOpen(true);
+  }, []);
 
   // Load real quota data when Session modal opens
   useEffect(() => {
-    if (sessionOpen && user) {
-      setCacheCleared(false);
-      serverApi.chats
-        .getQuota()
-        .then((data) => {
-          if (data) {
-            setQuotaData({
-              questionsUsed: data.questionsUsed ?? 0,
-              questionsLimit: data.questionsLimit ?? 10,
-              tokensUsed: data.tokensUsed ?? 0,
-              tokensLimit: data.tokensLimit ?? 50000,
-            });
-          }
-        })
-        .catch(() => {
+    if (!sessionOpen || !user) return;
+    serverApi.chats
+      .getQuota()
+      .then((data) => {
+        if (data) {
           setQuotaData({
-            questionsUsed: 0,
-            questionsLimit: 10,
-            tokensUsed: 0,
-            tokensLimit: 50000,
+            questionsUsed: data.questionsUsed ?? 0,
+            questionsLimit: data.questionsLimit ?? 10,
+            tokensUsed: data.tokensUsed ?? 0,
+            tokensLimit: data.tokensLimit ?? 50000,
           });
+        }
+      })
+      .catch(() => {
+        setQuotaData({
+          questionsUsed: 0,
+          questionsLimit: 10,
+          tokensUsed: 0,
+          tokensLimit: 50000,
         });
-    }
+      });
   }, [sessionOpen, user]);
 
   // Close dropdown on outside click
@@ -207,10 +210,7 @@ export function UserMenu() {
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                setDropdownOpen(false);
-                setSettingsOpen(true);
-              }}
+              onClick={handleOpenSettings}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans text-ink hover:bg-paper-dark hover:text-green-deep transition-colors text-left cursor-pointer"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-brass">
@@ -224,10 +224,7 @@ export function UserMenu() {
             <button
               type="button"
               role="menuitem"
-              onClick={() => {
-                setDropdownOpen(false);
-                setSessionOpen(true);
-              }}
+              onClick={handleOpenSession}
               className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans text-ink hover:bg-paper-dark hover:text-green-deep transition-colors text-left cursor-pointer"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-green-deep">
