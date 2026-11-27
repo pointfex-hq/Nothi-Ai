@@ -422,7 +422,8 @@ export default function ChatPage() {
     if (!chatScrollContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = chatScrollContainerRef.current;
     const distanceToBottom = scrollHeight - scrollTop - clientHeight;
-    setShowScrollBottom(distanceToBottom > 240);
+    // Only show scroll-to-bottom if there is actual message history and user is scrolled up
+    setShowScrollBottom(messages.length > 0 && distanceToBottom > 240);
   };
 
   // Auto-grow textarea (1 to 6 lines)
@@ -1144,13 +1145,13 @@ export default function ChatPage() {
       )}
 
       {/* ── 1. SINGLE AUTHORITATIVE HEADER (NO SECOND LOGO / TOGGLE) ── */}
-      <header className="h-[60px] md:h-[64px] border-b border-border/80 bg-[#FAF7F2] px-4 sm:px-6 flex items-center justify-between shrink-0 z-30">
+      <header className="h-[54px] sm:h-[60px] md:h-[64px] border-b border-border/80 bg-[#FAF7F2] px-3 sm:px-6 flex items-center justify-between shrink-0 z-30">
         {/* Left: Sidebar Toggle + Nothi AI Logo & Wordmark */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           <button
             type="button"
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-xs border border-border/70 text-ink hover:bg-paper-dark transition-colors cursor-pointer"
+            className="p-1.5 sm:p-2 rounded-xs border border-border/70 text-ink hover:bg-paper-dark transition-colors cursor-pointer"
             title={sidebarOpen ? 'Close sidebar' : 'Open sidebar'}
             aria-label="Toggle conversation sidebar"
           >
@@ -1159,22 +1160,22 @@ export default function ChatPage() {
             </svg>
           </button>
 
-          <Link href="/" className="no-underline flex items-center gap-2.5 group" aria-label="Nothi AI Home">
-            <AnimatedLogo state={logoState} size={26} />
-            <span className="font-heading text-xl font-bold text-green-deep tracking-tight">
+          <Link href="/" className="no-underline flex items-center gap-2 group whitespace-nowrap" aria-label="Nothi AI Home">
+            <AnimatedLogo state={logoState} size={24} />
+            <span className="font-heading text-lg sm:text-xl font-bold text-green-deep tracking-tight">
               Nothi AI
             </span>
-            <span className="font-bangla text-base text-ink-muted/80 ml-0.5">
+            <span className="hidden sm:inline-block font-bangla text-base text-ink-muted/80 ml-0.5">
               নথি এআই
             </span>
-            <span className="text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-paper-dark border border-border/70 text-ink-muted">
+            <span className="hidden md:inline-block text-[11px] font-mono px-1.5 py-0.5 rounded-full bg-paper-dark border border-border/70 text-ink-muted whitespace-nowrap">
               v1.2
             </span>
           </Link>
         </div>
 
-        {/* Center: Quiet 28 Verified Sections Link */}
-        <div className="hidden md:flex items-center">
+        {/* Center: Quiet 28 Verified Sections Link (Desktop Only) */}
+        <div className="hidden lg:flex items-center">
           <button
             type="button"
             onClick={() => setCorpusListOpen(true)}
@@ -1187,11 +1188,11 @@ export default function ChatPage() {
         </div>
 
         {/* Right Controls: Live Quota, Single EN / বাং Switch, Sign In/Profile, Back to site */}
-        <div className="flex items-center gap-2.5 sm:gap-3.5">
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {/* Live Redis Daily Quota Badge */}
           {mounted && user && quota && (
             <div
-              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper-dark/60 text-xs font-mono text-ink shadow-2xs"
+              className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper-dark/60 text-xs font-mono text-ink shadow-2xs whitespace-nowrap"
               title={`Questions: ${quota.questionsUsed}/${quota.questionsLimit} used • Tokens: ${quota.tokensUsed.toLocaleString()}/${quota.tokensLimit.toLocaleString()} • Resets at ${new Date(quota.resetAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}
             >
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
@@ -1199,28 +1200,18 @@ export default function ChatPage() {
             </div>
           )}
 
-          {/* Quiet link for smaller screens */}
-          <button
-            type="button"
-            onClick={() => setCorpusListOpen(true)}
-            className="md:hidden text-xs font-sans text-ink-muted hover:text-green-deep transition-colors cursor-pointer"
-            title="View 28 verified sections"
-          >
-            28 sections
-          </button>
-
           {/* Single Header EN / বাং Language Toggle */}
           <div
             role="radiogroup"
             aria-label="Select interface language"
-            className="inline-flex p-0.5 rounded-full border border-border/80 bg-paper-dark/60"
+            className="inline-flex p-0.5 rounded-full border border-border/80 bg-paper-dark/60 shrink-0"
           >
             <button
               type="button"
               role="radio"
               aria-checked={lang === 'en'}
               onClick={() => setLang('en')}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-sans transition-all cursor-pointer ${lang === 'en'
+              className={`px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-sans transition-all cursor-pointer ${lang === 'en'
                 ? 'bg-green-deep text-paper font-semibold shadow-2xs'
                 : 'text-ink-muted hover:text-ink'
                 }`}
@@ -1232,7 +1223,7 @@ export default function ChatPage() {
               role="radio"
               aria-checked={lang === 'bn'}
               onClick={() => setLang('bn')}
-              className={`px-2.5 py-0.5 rounded-full text-xs font-bangla transition-all cursor-pointer ${lang === 'bn'
+              className={`px-2 sm:px-2.5 py-0.5 rounded-full text-xs font-bangla transition-all cursor-pointer ${lang === 'bn'
                 ? 'bg-green-deep text-paper font-semibold shadow-2xs'
                 : 'text-ink-muted hover:text-ink'
                 }`}
@@ -1248,17 +1239,17 @@ export default function ChatPage() {
             <button
               type="button"
               onClick={() => setSignInModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper hover:bg-paper-dark text-xs font-sans text-ink hover:text-green-deep transition-all cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper hover:bg-paper-dark text-xs font-sans text-ink hover:text-green-deep transition-all cursor-pointer shadow-2xs whitespace-nowrap"
               title="Sign in with your email"
             >
               <span>{lang === 'bn' ? 'সাইন ইন' : 'Sign in'}</span>
             </button>
           )}
 
-          {/* Back to Site Link */}
+          {/* Back to Site Link (Desktop) */}
           <Link
             href="/"
-            className="text-xs font-sans text-ink-muted hover:text-green-deep px-2 py-1 transition-colors"
+            className="hidden md:inline-block text-xs font-sans text-ink-muted hover:text-green-deep px-2 py-1 transition-colors whitespace-nowrap"
             title="Return to Nothi AI landing page"
           >
             {lang === 'bn' ? 'মূল সাইট' : 'Back to site'}
@@ -1367,7 +1358,7 @@ export default function ChatPage() {
               <div className="my-auto py-8 sm:py-14 space-y-7 animate-in fade-in duration-300">
                 {/* Greeting & Verification Subtitle */}
                 <div className="space-y-3">
-                  <h1 className="font-heading text-3xl sm:text-4xl lg:text-[42px] font-normal text-ink tracking-tight leading-tight">
+                  <h1 className="font-heading text-2xl sm:text-4xl lg:text-[42px] font-normal text-ink tracking-tight leading-tight">
                     {lang === 'bn' ? 'কী আইনি তথ্য যাচাই করতে চান?' : 'What would you like to check?'}
                   </h1>
                   <p className="font-sans text-base text-ink-muted leading-relaxed">
@@ -1709,34 +1700,34 @@ export default function ChatPage() {
               </div>
             )}
 
-            {/* Jump to Latest Floating Pill */}
-            {showScrollBottom && (
+            {/* Jump to Latest Floating Pill (Centered cleanly above input bar, only with messages) */}
+            {messages.length > 0 && showScrollBottom && (
               <button
                 type="button"
                 onClick={() => scrollToBottom()}
-                className="fixed bottom-24 right-6 sm:right-12 z-20 px-3 py-1.5 rounded-full bg-paper border border-border/80 text-ink text-xs font-sans shadow-md hover:bg-paper-dark transition-all cursor-pointer flex items-center gap-1.5"
+                className="fixed bottom-36 sm:bottom-40 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 rounded-full bg-paper border border-border/90 text-ink text-xs font-sans shadow-lg hover:bg-paper-dark transition-all cursor-pointer flex items-center gap-1.5 whitespace-nowrap animate-in fade-in duration-150"
               >
                 <span>↓</span>
-                <span>Jump to latest</span>
+                <span>{lang === 'bn' ? 'সর্বশেষ বার্তায় যান' : 'Jump to latest'}</span>
               </button>
             )}
 
             {/* ── 3. DOCKED BOTTOM INPUT BAR (FLOATING ROUNDED CONTAINER 20PX, LAYERED SHADOW) ── */}
-            <div className="pt-4 sticky bottom-0 bg-[#F6F1E7]/95 backdrop-blur-md pb-4 z-10">
-              <div className="rounded-[20px] bg-paper border border-border shadow-[0_4px_20px_-2px_rgba(27,67,50,0.06),0_2px_6px_-1px_rgba(0,0,0,0.04)] focus-within:border-brass/80 focus-within:ring-2 focus-within:ring-brass/25 transition-all duration-200 p-3 space-y-2">
+            <div className="pt-2 sm:pt-4 sticky bottom-0 bg-[#F6F1E7]/95 backdrop-blur-md pb-3 sm:pb-5 z-10">
+              <div className="rounded-[20px] bg-paper border border-border shadow-[0_4px_20px_-2px_rgba(27,67,50,0.06),0_2px_6px_-1px_rgba(0,0,0,0.04)] focus-within:border-brass/80 focus-within:ring-2 focus-within:ring-brass/25 transition-all duration-200 p-2.5 sm:p-3 space-y-2">
                 {/* Ask Mode Switcher: Legal Search (Qdrant) vs Document Q&A vs Statutory Vetting */}
-                <div className="flex items-center justify-between pb-1.5 border-b border-border/50">
+                <div className="flex items-center justify-between pb-1.5 border-b border-border/50 gap-2">
                   <div
                     role="radiogroup"
                     aria-label="Select ask mode"
-                    className="inline-flex p-0.5 rounded-full border border-border/80 bg-paper-dark/60 text-xs"
+                    className="w-full sm:w-auto inline-flex p-0.5 rounded-full border border-border/80 bg-paper-dark/60 text-xs overflow-x-auto no-scrollbar"
                   >
                     <button
                       type="button"
                       role="radio"
                       aria-checked={askMode === 'legal'}
                       onClick={() => setAskMode('legal')}
-                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-[11px] sm:text-xs shrink-0 ${
                         askMode === 'legal'
                           ? 'bg-green-deep text-paper font-semibold shadow-2xs'
                           : 'text-ink-muted hover:text-ink'
@@ -1744,14 +1735,17 @@ export default function ChatPage() {
                       title="Qdrant Cloud vector search with lawyer-style reasoning on Section 17A and Bangladesh property laws"
                     >
                       <span className="text-[11px]">⚖️</span>
-                      <span>{lang === 'bn' ? 'আইনি সার্চ' : 'Legal Search'}</span>
+                      <span>
+                        <span className="inline sm:hidden">{lang === 'bn' ? 'আইনি' : 'Legal'}</span>
+                        <span className="hidden sm:inline">{lang === 'bn' ? 'আইনি সার্চ' : 'Legal Search'}</span>
+                      </span>
                     </button>
                     <button
                       type="button"
                       role="radio"
                       aria-checked={askMode === 'document'}
                       onClick={() => setAskMode('document')}
-                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-[11px] sm:text-xs shrink-0 ${
                         askMode === 'document'
                           ? 'bg-green-deep text-paper font-semibold shadow-2xs'
                           : 'text-ink-muted hover:text-ink'
@@ -1759,14 +1753,17 @@ export default function ChatPage() {
                       title="Direct question answering grounded strictly in your attached files (PDF or photo)"
                     >
                       <span className="text-[11px]">📄</span>
-                      <span>{lang === 'bn' ? 'নথি প্রশ্নোত্তর' : 'Document Q&A'}</span>
+                      <span>
+                        <span className="inline sm:hidden">{lang === 'bn' ? 'নথি' : 'Doc Q&A'}</span>
+                        <span className="hidden sm:inline">{lang === 'bn' ? 'নথি প্রশ্নোত্তর' : 'Document Q&A'}</span>
+                      </span>
                     </button>
                     <button
                       type="button"
                       role="radio"
                       aria-checked={askMode === 'statutory'}
                       onClick={() => setAskMode('statutory')}
-                      className={`px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                      className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1 rounded-full font-medium transition-all cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap text-[11px] sm:text-xs shrink-0 ${
                         askMode === 'statutory'
                           ? 'bg-green-deep text-paper font-semibold shadow-2xs'
                           : 'text-ink-muted hover:text-ink'
@@ -1774,7 +1771,10 @@ export default function ChatPage() {
                       title="Deterministic verification against 28 codified sections of Bangladesh laws"
                     >
                       <span className="text-[11px]">🏛️</span>
-                      <span>{lang === 'bn' ? 'বিধি নিরীক্ষা' : 'Statutory Vetting'}</span>
+                      <span>
+                        <span className="inline sm:hidden">{lang === 'bn' ? 'বিধি' : 'Statutory'}</span>
+                        <span className="hidden sm:inline">{lang === 'bn' ? 'বিধি নিরীক্ষা' : 'Statutory Vetting'}</span>
+                      </span>
                     </button>
                   </div>
 
@@ -1962,36 +1962,41 @@ export default function ChatPage() {
               </div>
 
               {/* Contextual Mode Guidance Note */}
-              <p className="text-center text-[12px] font-sans text-ink-muted pt-2.5 leading-normal">
-                {askMode === 'legal' ? (
-                  <>
-                    <span className="text-green-deep font-semibold">Legal Search:</span>{' '}
-                    {lang === 'bn'
-                      ? 'আপনার প্রশ্নটি Qdrant Cloud (nothi-legal-official) এবং ওপেনরাউটারে অ্যাডভোকেট যুক্তিযুক্তকরণে পাঠানো হয়।'
-                      : 'Queries Qdrant Cloud (nothi-legal-official) and retrieves lawyer-grounded statutory analysis via OpenRouter.'}
-                    {attachments.length > 0 && (
-                      <span className="text-brass font-medium">
-                        {' '}{lang === 'bn' ? 'সংযুক্ত নথির তথ্যও কেস ফ্যাক্ট হিসেবে অন্তর্ভুক্ত হবে।' : 'Extracted attachment text is also analyzed as case facts.'}
-                      </span>
-                    )}
-                  </>
-                ) : askMode === 'document' ? (
-                  <>
-                    <span className="text-green-deep font-semibold">Document Q&A:</span>{' '}
-                    {lang === 'bn'
-                      ? 'উত্তর সরাসরি আপনার সংযুক্ত সাফ কবলা, খতিয়ান বা এনআইডি থেকে দেওয়া হবে।'
-                      : 'Answers are grounded strictly in your attached deed, khatian, or NID scans.'}
-                  </>
-                ) : (
-                  <>
-                    <span className="text-green-deep font-semibold">Statutory Vetting:</span>{' '}
-                    {lang === 'bn'
-                      ? '২৮টি সংবিধিবদ্ধ ধারা দ্বারা নিয়ন্ত্রিত।'
-                      : 'Deterministic verification against 28 codified sections of Bangladeshi property law.'}
-                  </>
-                )}
-                <span className="block text-[11px] opacity-75 mt-0.5">
-                  Nothi AI explains verified statutory sections. It does not replace a licensed advocate.
+              <p className="text-center text-[11px] sm:text-[12px] font-sans text-ink-muted/80 pt-2 leading-tight sm:leading-normal px-2">
+                <span className="hidden sm:inline">
+                  {askMode === 'legal' ? (
+                    <>
+                      <span className="text-green-deep font-semibold">Legal Search:</span>{' '}
+                      {lang === 'bn'
+                        ? 'আপনার প্রশ্নটি Qdrant Cloud (nothi-legal-official) এবং ওপেনরাউটারে অ্যাডভোকেট যুক্তিযুক্তকরণে পাঠানো হয়।'
+                        : 'Queries Qdrant Cloud (nothi-legal-official) and retrieves lawyer-grounded statutory analysis via OpenRouter.'}
+                      {attachments.length > 0 && (
+                        <span className="text-brass font-medium">
+                          {' '}{lang === 'bn' ? 'সংযুক্ত নথির তথ্যও কেস ফ্যাক্ট হিসেবে অন্তর্ভুক্ত হবে।' : 'Extracted attachment text is also analyzed as case facts.'}
+                        </span>
+                      )}
+                    </>
+                  ) : askMode === 'document' ? (
+                    <>
+                      <span className="text-green-deep font-semibold">Document Q&A:</span>{' '}
+                      {lang === 'bn'
+                        ? 'উত্তর সরাসরি আপনার সংযুক্ত সাফ কবলা, খতিয়ান বা এনআইডি থেকে দেওয়া হবে।'
+                        : 'Answers are grounded strictly in your attached deed, khatian, or NID scans.'}
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-green-deep font-semibold">Statutory Vetting:</span>{' '}
+                      {lang === 'bn'
+                        ? '২৮টি সংবিধিবদ্ধ ধারা দ্বারা নিয়ন্ত্রিত।'
+                        : 'Deterministic verification against 28 codified sections of Bangladeshi property law.'}
+                    </>
+                  )}
+                  <br className="hidden sm:inline" />
+                </span>
+                <span className="opacity-75">
+                  {lang === 'bn'
+                    ? 'নথি এআই কেবল সংবিধিবদ্ধ ধারা ব্যাখ্যা করে • এটি লাইসেন্সপ্রাপ্ত আইনজীবীর বিকল্প নয়।'
+                    : 'Nothi AI explains verified statutory sections • Not legal advice.'}
                 </span>
               </p>
             </div>
