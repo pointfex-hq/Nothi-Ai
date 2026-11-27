@@ -114,10 +114,11 @@ export function useAuth() {
       .getSession()
       .then(({ user: serverUser }) => {
         if (serverUser) {
-          const current = getStoredUser();
+          const cached = getStoredUser();
+          const current = cached?.id === serverUser.id ? cached : null;
           const updated: NothiUser = {
             id: serverUser.id,
-            name: current?.name || serverUser.username.split('@')[0],
+            name: serverUser.name || serverUser.username.split('@')[0],
             email: serverUser.username,
             chamber: current?.chamber || (serverUser.role === 'admin' ? 'Chamber Administrator' : 'Chamber Counsel'),
             plan: serverUser.role === 'admin' ? 'pro' : 'basic',

@@ -3,6 +3,7 @@ const { randomBytes, randomUUID, scrypt, timingSafeEqual } = require('node:crypt
 const { promisify } = require('node:util');
 const store = require('./auth-store');
 const { recordAuditLog, getAuditLogs } = store;
+const { beginGoogleSignIn, completeGoogleSignIn } = require('./google-auth');
 const RequestError = require('./request-error');
 
 const router = express.Router();
@@ -170,18 +171,53 @@ function startSession(request, response, account, status) {
       throw new RequestError(403, 'Your account has been suspended by an administrator.');
     }
 
-    store.deleteExpiredSessions(now);
-    store.deleteSession(getSessionToken(request));
-    store.createSession(token, current.id, now, now + sessionLifetime);
-    recordAuditLog({
-      action: status === 201 ? 'USER_REGISTERED' : 'USER_LOGIN',
-      targetId: current.id,
-      details: current.username,
-    });
+    recordSession(request, current, token, now, status === 201 ? 'USER_REGISTERED' : 'USER_LOGIN');
     return publicUser(current);
   });
   response.cookie(sessionCookie, token, { ...cookieOptions(request), maxAge: sessionLifetime });
   response.status(status).json({ user });
+}
+
+function recordSession(request, account, token, now, action) {
+  store.deleteExpiredSessions(now);
+  store.deleteSession(getSessionToken(request));
+  store.createSession(token, account.id, now, now + sessionLifetime);
+  recordAuditLog({ action, targetId: account.id, details: account.username });
+}
+
+async function handleGoogleCallback(request, response) {
+  const { profile, origin } = await completeGoogleSignIn(request, response);
+  const email = profile.email.trim().toLowerCase();
+  if (!validEmail(email)) throw new RequestError(400, 'Google returned an unsupported email address.');
+
+  const token = randomBytes(32).toString('base64url');
+  const now = Date.now();
+  store.transaction(() => {
+    let account = store.findGoogleAccount(profile.sub);
+    if (account) {
+      if (account.status !== 'active' || account.role !== 'user' || account.isSuperAdmin) {
+        throw new RequestError(403, 'Google sign-in is unavailable for this account.');
+      }
+    } else {
+      if (store.readAccount(email)) {
+        throw new RequestError(409, 'An account already uses this email. Sign in with your existing method.');
+      }
+      const displayName = typeof profile.name === 'string'
+        ? profile.name.replace(/[\p{Cc}]/gu, '').trim().slice(0, 80)
+        : '';
+      account = {
+        id: randomUUID(), username: email, name: displayName || email.split('@')[0],
+        salt: randomBytes(16).toString('hex'), hash: randomBytes(64).toString('hex'),
+        role: 'user', status: 'active', createdAt: now, isEnvAccount: false,
+      };
+      store.registerGoogleAccount(account, profile.sub);
+      recordAuditLog({ action: 'USER_REGISTERED', targetId: account.id, details: account.username });
+    }
+    recordSession(request, account, token, now, 'GOOGLE_LOGIN');
+  });
+
+  response.cookie(sessionCookie, token, { ...cookieOptions(request), maxAge: sessionLifetime });
+  response.redirect(303, new URL('/dashboard', origin).href);
 }
 
 function requireUser(request, response, next) {
@@ -241,7 +277,7 @@ async function handleSignIn(request, response) {
   const salt = account ? Buffer.from(account.salt, 'hex') : fallbackSalt;
   const expected = account ? Buffer.from(account.hash, 'hex') : fallbackHash;
   const hash = await deriveKey(password, salt, 64, hashOptions);
-  if (!timingSafeEqual(hash, expected) || !account) {
+  if (!timingSafeEqual(hash, expected) || !account || store.isGoogleAccount(account.id)) {
     throw new RequestError(401, 'The username or password is incorrect.');
   }
   startSession(request, response, account, 200);
@@ -285,6 +321,9 @@ router.patch(['/profile', '/settings'], requireUser, readCredentials, async (req
 
   // Password Update
   if (newPassword !== undefined) {
+    if (store.isGoogleAccount(account.id)) {
+      throw new RequestError(400, 'Manage your Google password through your Google account.');
+    }
     if (account.isEnvAccount) {
       throw new RequestError(400, 'Password for environment-seeded accounts is managed via .env configuration.');
     }
@@ -335,6 +374,8 @@ router.get('/session', (request, response) => {
   response.json({ user: currentUser(request) });
 });
 
+router.post('/google/start', readCredentials, beginGoogleSignIn);
+router.get('/google/callback', handleGoogleCallback);
 router.post('/register', readCredentials, handleRegister);
 router.post('/sign-in', readCredentials, handleSignIn);
 router.post('/signin', readCredentials, handleSignIn);

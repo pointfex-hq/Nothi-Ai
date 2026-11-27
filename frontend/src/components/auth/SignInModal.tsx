@@ -1,5 +1,6 @@
 'use client';
 
+import { serverApi } from '@/lib/api';
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -43,6 +44,23 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
+
+  const handleGoogleSignIn = async (acknowledgeScope: boolean) => {
+    if (!acknowledgeScope) {
+      setError('Confirm that you understand the scope of Nothi AI.');
+      return;
+    }
+
+    setError(null);
+    setIsLoading(true);
+    try {
+      const { url } = await serverApi.auth.beginGoogleSignIn(acknowledgeScope);
+      window.location.assign(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google sign-in is unavailable.');
+      setIsLoading(false);
+    }
+  };
 
   // Handle Live Backend Registration
   const handleRegister = async (e: FormEvent) => {
@@ -292,6 +310,15 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                   </button>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleSignIn(signInScope)}
+                  disabled={isLoading}
+                  className="w-full py-3 rounded-xl border border-border bg-paper-light text-ink text-xs font-sans font-bold hover:border-brass transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Continue with Google
+                </button>
+
                 <div className="text-center pt-1">
                   <button
                     type="button"
@@ -379,6 +406,15 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                     {isLoading ? 'Registering...' : 'Register Account →'}
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleSignIn(registerScope)}
+                  disabled={isLoading}
+                  className="w-full py-3 rounded-xl border border-border bg-paper-light text-ink text-xs font-sans font-bold hover:border-brass transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Continue with Google
+                </button>
 
                 <div className="text-center pt-1">
                   <button

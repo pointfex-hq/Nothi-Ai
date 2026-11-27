@@ -60,7 +60,7 @@ const accountColumns = 'id, username, name, salt, hash, role, status, created_at
 
 transaction(() => {
   const { user_version: version } = db.prepare('PRAGMA user_version').get();
-  if (version >= 1 && version <= 3) return;
+  if (version >= 1 && version <= 4) return;
   if (version !== 0) throw new Error('Unsupported auth database schema version.');
   db.exec(`
     CREATE TABLE accounts (
@@ -124,7 +124,7 @@ transaction(() => {
 });
 
 transaction(() => {
-  if (db.prepare('PRAGMA user_version').get().user_version === 3) return;
+  if (db.prepare('PRAGMA user_version').get().user_version >= 3) return;
   db.exec(`
     CREATE TABLE password_registrations (
       account_id TEXT PRIMARY KEY REFERENCES accounts(id) ON DELETE CASCADE,
@@ -142,6 +142,50 @@ transaction(() => {
     PRAGMA user_version = 3;
   `);
 });
+
+transaction(() => {
+  if (db.prepare('PRAGMA user_version').get().user_version >= 4) return;
+  db.exec(`
+    CREATE TABLE google_identities (
+      subject TEXT PRIMARY KEY CHECK (length(subject) BETWEEN 1 AND 255),
+      account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id) ON DELETE CASCADE
+    ) STRICT;
+    CREATE TABLE google_sign_in_attempts (
+      state_hash TEXT PRIMARY KEY,
+      verifier TEXT NOT NULL,
+      expires_at INTEGER NOT NULL
+    ) STRICT;
+    CREATE INDEX google_sign_in_attempts_by_expiry ON google_sign_in_attempts(expires_at);
+    PRAGMA user_version = 4;
+  `);
+});
+
+function findGoogleAccount(subject) {
+  const identity = db.prepare('SELECT account_id FROM google_identities WHERE subject = ?').get(subject);
+  return identity && readAccountById(identity.account_id);
+}
+
+function registerGoogleAccount(account, subject) {
+  saveAccount(account);
+  db.prepare('INSERT INTO google_identities (subject, account_id) VALUES (?, ?)').run(subject, account.id);
+}
+
+function isGoogleAccount(accountId) {
+  return Boolean(db.prepare('SELECT 1 FROM google_identities WHERE account_id = ?').get(accountId));
+}
+
+function saveGoogleAttempt(state, verifier, now, lifetime) {
+  transaction(() => {
+    db.prepare('DELETE FROM google_sign_in_attempts WHERE expires_at <= ?').run(now);
+    db.prepare('INSERT INTO google_sign_in_attempts VALUES (?, ?, ?)').run(tokenHash(state), verifier, now + lifetime);
+  });
+}
+
+function consumeGoogleAttempt(state, now) {
+  const attempt = db.prepare('DELETE FROM google_sign_in_attempts WHERE state_hash = ? RETURNING verifier, expires_at')
+    .get(tokenHash(state));
+  return attempt?.expires_at > now ? attempt.verifier : undefined;
+}
 
 function registerAccount(account, acknowledged) {
   saveAccount(account);
@@ -233,5 +277,6 @@ function getAuditLogs() {
 
 module.exports = {
   transaction, registerAccount, saveAccount, readAccount, readAccountById, listAccounts, updateProfile, setStatus, deleteAccount,
+  findGoogleAccount, registerGoogleAccount, isGoogleAccount, saveGoogleAttempt, consumeGoogleAttempt,
   getSuperAdmin, markSuperAdmin, revokeAccountSessions, listSessions, revokeSession, createSession, getSession, deleteSession, deleteExpiredSessions, recordAuditLog, getAuditLogs,
 };

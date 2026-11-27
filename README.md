@@ -192,6 +192,20 @@ USER_EMAIL=user
 USER_PASSWORD=UserPassword123!
 ```
 
+#### Optional Google sign-in
+
+Create a Google OAuth **Web application** client. Add
+`http://localhost:3000/api/auth/google/callback` as an authorized redirect URI.
+Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and
+`GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`, then restart the backend.
+Open the frontend using the same origin as the configured redirect URI. If the
+Google app is in testing mode, use an account on its test-user list.
+
+In production, register the public frontend's HTTPS callback URI and include that
+origin in `CLIENT_ORIGIN`. Keep the client secret on the backend. Signing in
+with Google creates a standard account on first use. Existing password accounts
+with the same email continue to use password sign-in.
+
 ### Step 3: Run the Monorepo
 Start both the Next.js frontend (`:3000`) and the Node.js backend (`:3001`) simultaneously:
 

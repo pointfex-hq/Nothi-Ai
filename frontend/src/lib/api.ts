@@ -79,6 +79,18 @@ export const serverApi = {
 
   /** Role-based Authentication endpoints */
   auth: {
+    async beginGoogleSignIn(acknowledgeScope: boolean): Promise<{ url: string }> {
+      const response = await fetch('/api/auth/google/start', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ acknowledgeScope }),
+      });
+      const result: { url?: string; error?: string } = await response.json();
+      if (!response.ok || !result.url) throw new Error(result.error || 'Google sign-in is unavailable.');
+      return { url: result.url };
+    },
+
     async getSession(): Promise<{ user: ServerUser | null }> {
       return apiRequest<{ user: ServerUser | null }>('/api/auth/session');
     },
