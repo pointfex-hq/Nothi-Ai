@@ -356,7 +356,7 @@ export function ChatDrawer() {
                   ? 'দলিল দাখিলের সময়সীমা বা ধারা সম্পর্কে প্রশ্ন লিখুন...'
                   : 'Ask about deed timelines, NID formats, or Khatians...'
               }
-              className="w-full px-2 py-1 text-xs sm:text-sm font-sans text-ink placeholder:text-ink-muted/50 bg-transparent resize-none max-h-32 focus:outline-hidden leading-relaxed"
+              className="w-full px-2 py-1 text-xs sm:text-sm font-sans text-ink placeholder:text-ink-muted/50 bg-transparent resize-none max-h-32 border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none leading-relaxed"
             />
 
             <div className="flex items-center justify-between pt-1 border-t border-border/40 px-1">

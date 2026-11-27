@@ -34,7 +34,7 @@ export function VettingMemo({
   const isCompliant = verdict === 'COMPLIANT';
 
   return (
-    <section className="rounded-sm border border-border bg-surface p-6 shadow-xs relative print:p-0 print:border-none print:shadow-none">
+    <section className="rounded-xl border border-border bg-surface p-6 shadow-xs relative print:p-0 print:border-none print:shadow-none">
       {/* Top Banner */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-green-deep pb-4 mb-6">
         <div>

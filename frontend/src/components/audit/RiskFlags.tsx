@@ -70,7 +70,7 @@ export function RiskFlags({
   const greenCount = flags.filter((f) => f.severity === 'GREEN').length;
 
   return (
-    <section className="rounded-sm border border-border bg-surface p-5 shadow-xs">
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3 mb-4">
         <div>
           <h2 className="font-heading text-lg font-bold text-green-deep">

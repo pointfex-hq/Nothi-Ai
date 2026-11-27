@@ -15,10 +15,10 @@ interface ThinkingStageIndicatorProps {
 }
 
 const STAGE_LABELS: Record<PipelineStage, { en: string; bn: string }> = {
-  reading: { en: 'Reading your question', bn: 'প্রশ্ন পর্যালোচনা করা হচ্ছে' },
-  searching: { en: 'Searching verified sections', bn: 'যাচাইকৃত ধারাসমূহ অনুসন্ধান করা হচ্ছে' },
-  checking: { en: 'Checking citations', bn: 'আইনি উদ্ধৃতিসমূহ যাচাই করা হচ্ছে' },
-  writing: { en: 'Writing the answer', bn: 'উত্তর সংকলন করা হচ্ছে' },
+  reading: { en: 'Reading question', bn: 'প্রশ্ন পর্যালোচনা হচ্ছে' },
+  searching: { en: 'Checking statutory sections', bn: 'সংবিধিবদ্ধ ধারা পরীক্ষা হচ্ছে' },
+  checking: { en: 'Checking statutory sections', bn: 'সংবিধিবদ্ধ ধারা পরীক্ষা হচ্ছে' },
+  writing: { en: 'Drafting verified response', bn: 'যাচাইকৃত উত্তর প্রস্তুত হচ্ছে' },
   not_found: { en: 'Not found in verified sections', bn: 'যাচাইকৃত ধারায় পাওয়া যায়নি' },
 };
 
@@ -29,58 +29,26 @@ export function ThinkingStageIndicator({
   const displayedText = STAGE_LABELS[currentStage]?.en || 'Reasoning';
 
   return (
-    <div className="space-y-3.5 py-1">
-      {/* Top stage status line */}
+    <div className="py-2 space-y-2">
+      {/* 3-Step Simple Status Line */}
       <div className="flex items-center gap-2.5">
         <AnimatedLogo
           state={isError ? 'error' : 'thinking'}
-          size={20}
+          size={18}
         />
 
-        <span
-          key={currentStage}
-          className="font-sans text-xs text-ink-muted transition-opacity duration-200 animate-in fade-in"
-          aria-live="polite"
-        >
-          {displayedText}
-          <span className="inline-block w-1.5 h-1.5 rounded-full bg-brass animate-pulse ml-1.5" />
-        </span>
+        <div className="flex items-center gap-2 font-sans text-xs text-ink-muted" aria-live="polite">
+          <span>{displayedText}</span>
+          <span className="flex gap-1 items-center">
+            <span className="w-1.5 h-1.5 rounded-full bg-brass/80 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brass/60 animate-pulse delay-100" />
+            <span className="w-1.5 h-1.5 rounded-full bg-brass/40 animate-pulse delay-200" />
+          </span>
+        </div>
       </div>
 
-      {/* Subtle Paper-Toned Skeleton (Not Gray-Blue) */}
-      <div className="space-y-2 max-w-xl pl-7" aria-hidden="true">
-        <div
-          className="h-3.5 rounded-xs w-5/6"
-          style={{
-            background: 'linear-gradient(90deg, #ede7db 0%, #f6f2e9 50%, #ede7db 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'skeletonShimmer 1.8s ease-in-out infinite',
-          }}
-        />
-        <div
-          className="h-3.5 rounded-xs w-4/6"
-          style={{
-            background: 'linear-gradient(90deg, #ede7db 0%, #f6f2e9 50%, #ede7db 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'skeletonShimmer 1.8s ease-in-out infinite 0.2s',
-          }}
-        />
-        <div
-          className="h-3.5 rounded-xs w-3/6"
-          style={{
-            background: 'linear-gradient(90deg, #ede7db 0%, #f6f2e9 50%, #ede7db 100%)',
-            backgroundSize: '200% 100%',
-            animation: 'skeletonShimmer 1.8s ease-in-out infinite 0.4s',
-          }}
-        />
-      </div>
-
-      <style jsx>{`
-        @keyframes skeletonShimmer {
-          0% { background-position: 200% 0; }
-          100% { background-position: -200% 0; }
-        }
-      `}</style>
+      {/* Lightweight subtle skeleton bar */}
+      <div className="h-2 w-48 rounded-full bg-paper-dark/80 pl-6" />
     </div>
   );
 }

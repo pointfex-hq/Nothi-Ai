@@ -32,7 +32,7 @@ export function EntityMatrix({ rows }: EntityMatrixProps) {
   }
 
   return (
-    <section className="rounded-sm border border-border bg-surface p-5 shadow-xs">
+    <section className="rounded-xl border border-border bg-surface p-5 shadow-xs">
       <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
         <div>
           <h2 className="font-heading text-lg font-bold text-green-deep">
@@ -54,7 +54,7 @@ export function EntityMatrix({ rows }: EntityMatrixProps) {
         </div>
       </div>
 
-      <div className="overflow-x-auto border border-border rounded-sm bg-paper">
+      <div className="overflow-x-auto border border-border rounded-lg bg-paper">
         <table
           className="w-full text-left border-collapse text-xs"
           aria-label="Cross-document entity comparison matrix"

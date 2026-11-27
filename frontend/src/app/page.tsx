@@ -1,31 +1,35 @@
 'use client';
 
-import { Hero3DSection } from '@/components/landing/Hero3DSection';
+import { LiteHero } from '@/components/landing/LiteHero';
+import { HowItWorksSection } from '@/components/landing/HowItWorksSection';
 import { ExploreSection } from '@/components/landing/ExploreSection';
 import { AudienceSection } from '@/components/landing/AudienceSection';
-import { CitationGateSection } from '@/components/landing/citation-gate/CitationGateSection';
+import { LiteCitationGate } from '@/components/landing/citation-gate/LiteCitationGate';
 import { PricingSection } from '@/components/pricing/PricingSection';
 import { FinalCtaSection } from '@/components/landing/FinalCtaSection';
 
 export default function HomePage() {
   return (
     <div className="flex flex-col bg-paper text-ink">
-      {/* ── 1. HERO 3D SCENE: 400VH PINNED REGISTRY DESK ──────────── */}
-      <Hero3DSection />
+      {/* ── 1. LIGHTWEIGHT HERO SECTION ───────────────────────────── */}
+      <LiteHero />
 
-      {/* ── 2. CREATIVE EXPLORE SHOWCASE SECTION ──────────────────── */}
+      {/* ── 2. HOW IT WORKS: 5 DETERMINISTIC STEPS ROW ────────────── */}
+      <HowItWorksSection />
+
+      {/* ── 3. INTERACTIVE CONVEYANCE TRIAD SHOWCASE ──────────────── */}
       <ExploreSection />
 
-      {/* ── 3. WHO IT'S FOR: 3 SRS AUDIENCES WITH EDITORIAL TYPOGRAPHY */}
+      {/* ── 4. WHO IT'S FOR: 3 SRS AUDIENCES (ADVOCATES, BANKS, PROMOTERS) */}
       <AudienceSection />
 
-      {/* ── 4. 3D CITATION GATE & ZERO-FABRICATION CHECKPOINT ─────── */}
-      <CitationGateSection />
+      {/* ── 5. LIGHTWEIGHT DETERMINISTIC CITATION GATE ────────────── */}
+      <LiteCitationGate />
 
-      {/* ── 5. THREE-TIER PRICING & FAQ SECTION (WITHOUT COMPARISON TABLE) */}
+      {/* ── 6. THREE-TIER PRICING & 6-ITEM FAQ ACCORDION ──────────── */}
       <PricingSection showFaq={true} />
 
-      {/* ── 6. FINAL CALL TO ACTION ───────────────────────────────── */}
+      {/* ── 7. FINAL CALL TO ACTION ───────────────────────────────── */}
       <FinalCtaSection />
     </div>
   );

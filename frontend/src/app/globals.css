@@ -136,6 +136,16 @@ body::before {
   outline-offset: 2px;
 }
 
+/* Suppress unwanted browser/focus-visible outline boxes on text inputs and textareas that use custom container focus rings */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none;
+}
+
 /* ── Bangla text ───────────────────────────────────────── */
 .bangla, .font-bangla, [lang="bn"] {
   font-family: var(--font-bangla), 'Noto Serif Bengali', serif !important;
@@ -206,30 +216,6 @@ body::before {
 ::-webkit-scrollbar-thumb {
   background: var(--border);
   border-radius: 3px;
-}
-
-/* ── Custom Cursor Animations ───────────────────────────── */
-@keyframes cursor-spin-slow {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-@keyframes cursor-spin-reverse {
-  from { transform: rotate(360deg); }
-  to { transform: rotate(0deg); }
-}
-@keyframes stamp-expand {
-  0% { transform: scale(0.6); opacity: 0.95; }
-  100% { transform: scale(2.4); opacity: 0; }
-}
-
-.animate-spin-slow {
-  animation: cursor-spin-slow 20s linear infinite;
-}
-.animate-spin-reverse {
-  animation: cursor-spin-reverse 14s linear infinite;
-}
-.animate-stamp-expand {
-  animation: stamp-expand 0.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 ::-webkit-scrollbar-thumb:hover {

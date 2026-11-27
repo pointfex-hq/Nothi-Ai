@@ -64,6 +64,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${lora.variable} ${jetbrainsMono.variable} ${notoSerifBengali.variable} h-full antialiased`}
     >
       <body className={`${inter.className} flex min-h-full flex-col bg-background text-foreground antialiased selection:bg-green-deep selection:text-paper`}>
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:px-4 focus:py-2 focus:rounded-md focus:bg-green-deep focus:text-paper focus:font-sans focus:text-xs focus:font-bold focus:shadow-lg focus:outline-hidden focus:ring-2 focus:ring-brass"
+        >
+          Skip to main content
+        </a>
         <LangProvider>
           <ChatProvider>
             <Header />
