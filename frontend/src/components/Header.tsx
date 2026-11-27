@@ -7,6 +7,7 @@ import { useLang } from '@/lib/lang';
 import { Logo } from './Logo';
 import { useAuth } from '@/lib/auth';
 import { SignInModal } from '@/components/auth/SignInModal';
+import { UserMenu } from '@/components/auth/UserMenu';
 
 const subscribeReducedMotion = (callback: () => void) => {
   const mql = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -245,48 +246,19 @@ export function Header() {
             <div className="flex items-center min-h-[32px]">
               {mounted && (
                 user ? (
-                  <div className="hidden sm:flex items-center gap-1.5 sm:gap-2">
-                    <Link
-                      href={user.role === 'admin' ? '/admin' : '/dashboard'}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-border bg-paper-dark/70 hover:bg-paper-dark text-ink font-sans text-xs font-semibold transition-all shadow-2xs hover:border-brass/60"
-                      title={`Signed in as ${user.name}`}
-                    >
-                      <span className={`w-2 h-2 rounded-full ${user.role === 'admin' ? 'bg-amber-600' : 'bg-emerald-600'} animate-pulse`} />
-                      <span className="max-w-[110px] truncate">{user.name.replace('Advocate ', 'Adv. ')}</span>
-                      <span className="text-[10px] font-mono uppercase px-1 rounded bg-paper border border-border/70 text-ink-muted">
-                        {user.role}
-                      </span>
-                    </Link>
-
-                    <Link
-                      href={user.role === 'admin' ? '/admin' : '/dashboard'}
-                      className="px-2.5 py-1.5 rounded-full text-xs font-sans font-medium text-ink-muted hover:text-ink hover:bg-paper-dark/70 transition-colors"
-                    >
-                      {user.role === 'admin'
-                        ? (lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Panel')
-                        : (lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard')}
-                    </Link>
-
+                  <div className="flex items-center gap-2">
                     <Link
                       href="/chat"
-                      className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-green-deep hover:bg-green-mid text-paper font-sans text-xs font-semibold shadow-xs hover:shadow-md transition-all active:scale-95 cursor-pointer"
-                      title="Open Nothi AI Chat"
+                      className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-green-deep hover:bg-green-mid text-paper font-sans text-xs font-semibold shadow-2xs hover:shadow-xs transition-all active:scale-95 cursor-pointer"
+                      title="Open Nothi AI Assistant"
                     >
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                       </svg>
-                      <span>{lang === 'bn' ? 'চ্যাট' : 'Chat'}</span>
+                      <span>{lang === 'bn' ? 'সহকারী' : 'Assistant'}</span>
                       <span className="text-brass">→</span>
                     </Link>
-
-                    <button
-                      type="button"
-                      onClick={() => signOut()}
-                      className="text-xs font-sans font-medium text-ink-muted hover:text-vermillion px-2 py-1 rounded-full hover:bg-paper-dark transition-colors cursor-pointer"
-                      title="Sign out of your account"
-                    >
-                      {lang === 'bn' ? 'সাইন আউট' : 'Sign out'}
-                    </button>
+                    <UserMenu />
                   </div>
                 ) : (
                   <button
@@ -399,7 +371,9 @@ export function Header() {
                   <button
                     type="button"
                     onClick={() => {
-                      signOut();
+                      signOut().then(() => {
+                        if (typeof window !== 'undefined') window.location.replace('/');
+                      });
                       setMobileMenuOpen(false);
                     }}
                     className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-full border border-vermillion/40 text-vermillion font-sans text-xs font-semibold hover:bg-vermillion/10 transition-colors cursor-pointer"
