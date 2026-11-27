@@ -222,7 +222,7 @@ export default function AuditWorkspacePage() {
         {auditResult && (
           <div className="flex items-center gap-2">
             <div
-              className={`px-3 py-1.5 rounded-sm border font-mono text-xs font-bold tracking-wider uppercase ${
+              className={`px-3.5 py-1.5 rounded-full border font-mono text-xs font-bold tracking-wider uppercase ${
                 auditResult.summary.verdict === 'COMPLIANT'
                   ? 'border-flag-green text-flag-green bg-flag-green/10'
                   : 'border-vermillion text-vermillion bg-vermillion/10'

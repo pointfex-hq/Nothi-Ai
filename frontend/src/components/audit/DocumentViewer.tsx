@@ -36,7 +36,7 @@ export function DocumentViewer({
   ];
 
   return (
-    <div className="flex flex-col h-full rounded-sm border border-border bg-surface shadow-xs">
+    <div className="flex flex-col h-full rounded-xl border border-border bg-surface shadow-xs overflow-hidden">
       {/* Top Bar: Tabs & Controls */}
       <div className="border-b border-border bg-paper p-2.5 flex flex-wrap items-center justify-between gap-2">
         {/* Document Switcher Tabs */}
@@ -49,7 +49,7 @@ export function DocumentViewer({
                 role="tab"
                 aria-selected={isActive}
                 onClick={() => onDocChange(tab.id)}
-                className={`px-3 py-1.5 text-xs rounded-sm font-medium transition-all cursor-pointer flex items-center gap-1.5 ${isActive
+                className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all cursor-pointer flex items-center gap-1.5 min-h-[36px] ${isActive
                   ? 'bg-green-deep text-paper shadow-xs font-semibold'
                   : 'bg-paper-light text-ink-muted hover:text-ink hover:bg-paper-dark border border-border/60'
                   }`}
