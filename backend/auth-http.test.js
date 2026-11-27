@@ -142,6 +142,8 @@ test('password and Google auth, sessions, admin moderation and usage', async t =
     await request('auth/register', 400, { method: 'POST', body: { ...registration, ...invalid } });
   }
   const a = await request('auth/register', 201, { method: 'POST', body: registration });
+  const registered = await request('admin/users', 200, { cookie: root.cookie });
+  assert.equal(Object.values(registered).filter(user => user?.id).length, 2);
   await request('auth/login', 400, { method: 'POST', body: { ...registration, acknowledgeScope: false } });
   const b = await request('auth/login', 200, { method: 'POST', body: registration });
   const { sessions } = await request('auth/sessions', 200, { cookie: b.cookie });
@@ -311,8 +313,12 @@ test('password and Google auth, sessions, admin moderation and usage', async t =
   }
   const events = await request('admin/audit-logs', 200, { cookie: root.cookie });
   const actions = Object.values(events).filter(event => event?.targetId === googleUser.id).map(event => event.action);
-  for (const action of ['GOOGLE_LOGIN', 'TOKEN_USAGE_REPORTED', 'USER_SUSPENDED', 'USER_BANNED', 'USER_DELETED', 'UPLOAD_REJECTED']) {
+  for (const action of ['USER_REGISTERED', 'GOOGLE_LOGIN', 'SESSION_CREATED', 'SESSION_REVOKED',
+    'TOKEN_USAGE_REPORTED', 'USER_SUSPENDED', 'USER_BANNED', 'USER_DELETED', 'UPLOAD_REJECTED']) {
     assert.ok(actions.includes(action), action);
+  }
+  for (const event of Object.values(events).filter(event => event?.targetId === googleUser.id)) {
+    assert.ok(Number.isSafeInteger(event.timestamp) && event.timestamp > 0);
   }
 
   await stop();

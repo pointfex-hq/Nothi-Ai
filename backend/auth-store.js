@@ -312,7 +312,8 @@ function setStatus(id, status) {
 }
 
 function revokeAccountSessions(id) {
-  db.prepare('DELETE FROM sessions WHERE account_id = ?').run(id);
+  const revoked = db.prepare('DELETE FROM sessions WHERE account_id = ? RETURNING public_id AS id, account_id AS accountId').all(id);
+  for (const session of revoked) recordSessionEvent('SESSION_REVOKED', session);
 }
 
 let chatsAttached = false;
@@ -323,6 +324,7 @@ function deleteAccount(id) {
     chatsAttached = true;
   }
   db.prepare('DELETE FROM chat_data.chats WHERE owner_id = ?').run(id);
+  revokeAccountSessions(id);
   db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
 }
 
@@ -330,9 +332,19 @@ function tokenHash(token) {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function recordSessionEvent(action, session, timestamp = Date.now()) {
+  const account = readAccountById(session.accountId);
+  recordAuditLog({
+    action, targetId: session.accountId, timestamp,
+    details: JSON.stringify({ sessionId: session.id, username: account?.username }),
+  });
+}
+
 function createSession(token, accountId, createdAt, expiresAt) {
+  const id = randomUUID();
   db.prepare('INSERT INTO sessions (token_hash, account_id, created_at, expires_at, public_id) VALUES (?, ?, ?, ?, ?)')
-    .run(tokenHash(token), accountId, createdAt, expiresAt, randomUUID());
+    .run(tokenHash(token), accountId, createdAt, expiresAt, id);
+  recordSessionEvent('SESSION_CREATED', { id, accountId }, createdAt);
 }
 
 function getSession(token) {
@@ -341,12 +353,32 @@ function getSession(token) {
     .get(tokenHash(token));
 }
 
-function deleteSession(token) {
-  if (token) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash(token));
+function deleteSession(token, action, now = Date.now()) {
+  if (!token) return;
+  const session = db.prepare(`
+    DELETE FROM sessions WHERE token_hash = ?
+    RETURNING public_id AS id, account_id AS accountId, expires_at AS expiresAt
+  `).get(tokenHash(token));
+  if (session) recordSessionEvent(session.expiresAt <= now ? 'SESSION_EXPIRED' : action, session,
+    session.expiresAt <= now ? session.expiresAt : now);
+}
+
+function expireSession(token, now) {
+  transaction(() => {
+    const session = db.prepare(`
+      DELETE FROM sessions WHERE token_hash = ? AND expires_at <= ?
+      RETURNING public_id AS id, account_id AS accountId, expires_at AS expiresAt
+    `).get(tokenHash(token), now);
+    if (session) recordSessionEvent('SESSION_EXPIRED', session, session.expiresAt);
+  });
 }
 
 function deleteExpiredSessions(now) {
-  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+  const expired = db.prepare(`
+    DELETE FROM sessions WHERE expires_at <= ?
+    RETURNING public_id AS id, account_id AS accountId, expires_at AS expiresAt
+  `).all(now);
+  for (const session of expired) recordSessionEvent('SESSION_EXPIRED', session, session.expiresAt);
 }
 
 function listSessions(accountId, now) {
@@ -357,8 +389,10 @@ function listSessions(accountId, now) {
 }
 
 function revokeSession(accountId, id, now) {
-  return db.prepare('DELETE FROM sessions WHERE account_id = ? AND public_id = ? AND expires_at > ?')
-    .run(accountId, id, now).changes > 0;
+  const result = db.prepare('DELETE FROM sessions WHERE account_id = ? AND public_id = ? AND expires_at > ?')
+    .run(accountId, id, now);
+  if (result.changes) recordSessionEvent('SESSION_REVOKED', { id, accountId }, now);
+  return result.changes > 0;
 }
 
 function getAuditLogs() {
@@ -369,5 +403,5 @@ module.exports = {
   readAdminSettings, writeAdminSettings, wasAccountDeleted, recordTokenReservation, recordTokenReconciliation, listRecordedTokenUsage,
   transaction, registerAccount, saveAccount, readAccount, readAccountById, listAccounts, updateProfile, setStatus, deleteAccount,
   findGoogleAccount, registerGoogleAccount, isGoogleAccount, saveGoogleAttempt, consumeGoogleAttempt,
-  getSuperAdmin, markSuperAdmin, revokeAccountSessions, listSessions, revokeSession, createSession, getSession, deleteSession, deleteExpiredSessions, recordAuditLog, getAuditLogs,
+  getSuperAdmin, markSuperAdmin, revokeAccountSessions, listSessions, revokeSession, createSession, getSession, deleteSession, expireSession, deleteExpiredSessions, recordAuditLog, getAuditLogs,
 };

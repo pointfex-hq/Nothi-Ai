@@ -132,13 +132,13 @@ function currentUser(request) {
   const token = getSessionToken(request);
   const session = store.getSession(token);
   if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    store.deleteSession(token);
+  const now = Date.now();
+  if (session.expiresAt <= now) {
+    store.expireSession(token, now);
     return null;
   }
   const account = store.readAccountById(session.accountId);
   if (!account || account.status !== 'active') {
-    store.deleteSession(token);
     return null;
   }
   return publicUser(account);
@@ -183,7 +183,7 @@ function startSession(request, response, account, status) {
 
 function recordSession(request, account, token, now, action) {
   store.deleteExpiredSessions(now);
-  store.deleteSession(getSessionToken(request));
+  store.deleteSession(getSessionToken(request), 'SESSION_REPLACED', now);
   store.createSession(token, account.id, now, now + sessionLifetime);
   recordAuditLog({ action, targetId: account.id, details: account.username });
 }
@@ -228,20 +228,19 @@ function requireUser(request, response, next) {
   if (!token) return response.status(401).json({ error: 'Sign in to continue.' });
 
   const session = store.getSession(token);
-  if (!session || session.expiresAt <= Date.now()) {
-    if (session) store.deleteSession(token);
+  const now = Date.now();
+  if (!session || session.expiresAt <= now) {
+    if (session) store.expireSession(token, now);
     return response.status(401).json({ error: 'Sign in to continue.' });
   }
 
   const account = store.readAccountById(session.accountId);
   if (!account) {
-    store.deleteSession(token);
     response.clearCookie(sessionCookie, cookieOptions(request));
     return response.status(401).json({ error: 'Your account no longer exists.' });
   }
 
   if (account.status !== 'active') {
-    store.deleteSession(token);
     response.clearCookie(sessionCookie, cookieOptions(request));
     return response.status(403).json({ error: 'Your account is restricted by an administrator.' });
   }
@@ -288,14 +287,7 @@ async function handleSignIn(request, response) {
 
 function handleSignOut(request, response) {
   const token = getSessionToken(request);
-  store.transaction(() => {
-    const session = store.getSession(token);
-    if (!session) return;
-    store.deleteSession(token);
-    if (session.expiresAt > Date.now()) {
-      recordAuditLog({ action: 'USER_LOGOUT', targetId: session.accountId });
-    }
-  });
+  store.transaction(() => store.deleteSession(token, 'USER_LOGOUT'));
   response.clearCookie(sessionCookie, cookieOptions(request));
   response.json({ user: null });
 }
@@ -367,7 +359,6 @@ router.delete('/sessions/:id', requireUser, (request, response) => {
   const currentId = store.getSession(getSessionToken(request))?.id;
   store.transaction(() => {
     if (!store.revokeSession(user.id, id, Date.now())) throw new RequestError(404, 'Active session not found.');
-    recordAuditLog({ action: 'SESSION_REVOKED', targetId: user.id, details: id });
   });
   if (currentId === id) response.clearCookie(sessionCookie, cookieOptions(request));
   response.json({ id });
