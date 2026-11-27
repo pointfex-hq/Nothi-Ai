@@ -1,5 +1,6 @@
 'use client';
 
+import { serverApi } from '@/lib/api';
 import { useState, useEffect, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
@@ -22,6 +23,8 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [chamber, setChamber] = useState('');
+  const [registerScope, setRegisterScope] = useState(false);
+  const [signInScope, setSignInScope] = useState(false);
 
   // Sign In Form Fields
   const [signInEmail, setSignInEmail] = useState('');
@@ -42,6 +45,23 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
 
   if (!isOpen) return null;
 
+  const handleGoogleSignIn = async (acknowledgeScope: boolean) => {
+    if (!acknowledgeScope) {
+      setError('Confirm that you understand the scope of Nothi AI.');
+      return;
+    }
+
+    setError(null);
+    setIsLoading(true);
+    try {
+      const { url } = await serverApi.auth.beginGoogleSignIn(acknowledgeScope);
+      window.location.assign(url);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Google sign-in is unavailable.');
+      setIsLoading(false);
+    }
+  };
+
   // Handle Live Backend Registration
   const handleRegister = async (e: FormEvent) => {
     e.preventDefault();
@@ -53,7 +73,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       setError('Please enter a valid email address');
       return;
     }
-    if (!password || password.length < 8) {
+    if (password.length < 8 || password.length > 128) {
       setError('Password must be between 8 and 128 characters');
       return;
     }
@@ -65,6 +85,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       await register({
         email: email.trim().toLowerCase(),
         password,
+        acknowledgeScope: registerScope,
         name: name.trim(),
         chamber: chamber.trim() || undefined,
       });
@@ -96,6 +117,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       const authUser = await signIn({
         email: signInEmail.trim().toLowerCase(),
         password: signInPassword,
+        acknowledgeScope: signInScope,
       });
       setIsLoading(false);
       onClose();
@@ -273,6 +295,11 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                   />
                 </div>
 
+                <label className="flex items-start gap-2 text-xs font-sans text-ink">
+                  <input type="checkbox" required checked={signInScope} onChange={(e) => setSignInScope(e.target.checked)} />
+                  <span>I understand that Nothi AI is for Bangladeshi property law and document vetting.</span>
+                </label>
+
                 <div className="pt-1">
                   <button
                     type="submit"
@@ -282,6 +309,15 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                     {isLoading ? 'Signing In...' : 'Sign In →'}
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleSignIn(signInScope)}
+                  disabled={isLoading}
+                  className="w-full py-3 rounded-xl border border-border bg-paper-light text-ink text-xs font-sans font-bold hover:border-brass transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Continue with Google
+                </button>
 
                 <div className="text-center pt-1">
                   <button
@@ -356,6 +392,11 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                   />
                 </div>
 
+                <label className="flex items-start gap-2 text-xs font-sans text-ink">
+                  <input type="checkbox" required checked={registerScope} onChange={(e) => setRegisterScope(e.target.checked)} />
+                  <span>I understand that Nothi AI is for Bangladeshi property law and document vetting.</span>
+                </label>
+
                 <div className="pt-1">
                   <button
                     type="submit"
@@ -365,6 +406,15 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                     {isLoading ? 'Registering...' : 'Register Account →'}
                   </button>
                 </div>
+
+                <button
+                  type="button"
+                  onClick={() => void handleGoogleSignIn(registerScope)}
+                  disabled={isLoading}
+                  className="w-full py-3 rounded-xl border border-border bg-paper-light text-ink text-xs font-sans font-bold hover:border-brass transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Continue with Google
+                </button>
 
                 <div className="text-center pt-1">
                   <button

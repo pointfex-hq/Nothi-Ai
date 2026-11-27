@@ -1,5 +1,6 @@
-const { usageLimitsFile, readLocalJson, writeLocalJson } = require('./local-data');
+const { usageLimitsFile, readLocalJson } = require('./local-data');
 const RequestError = require('./request-error');
+const store = require('./auth-store');
 
 function readDefault(name, fallback) {
   const value = process.env[name]?.trim();
@@ -38,17 +39,22 @@ function validateLimits(value) {
   }));
 }
 
-let currentLimits = validateLimits(readLocalJson(usageLimitsFile, defaults));
+const fallbackLimits = store.readAdminSettings() ?? validateLimits(readLocalJson(usageLimitsFile, defaults));
 
 function getUsageLimits() {
-  return currentLimits;
+  return store.readAdminSettings() ?? fallbackLimits;
 }
 
-function saveUsageLimits(value) {
+function saveUsageLimits(value, actorId) {
   const limits = validateLimits(value);
-  writeLocalJson(usageLimitsFile, limits);
-  currentLimits = limits;
-  return limits;
+  return store.transaction(() => {
+    store.writeAdminSettings(limits);
+    store.recordAuditLog({
+      action: 'QUOTA_UPDATED', adminId: actorId,
+      details: JSON.stringify(limits),
+    });
+    return limits;
+  });
 }
 
 module.exports = { getUsageLimits, saveUsageLimits };

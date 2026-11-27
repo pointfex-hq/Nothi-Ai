@@ -1,21 +1,17 @@
 const express = require('express');
 const { randomUUID } = require('node:crypto');
-const { win32 } = require('node:path');
 const { answerChatQuestion, answerLegalQuestion, getQuestion } = require('./ask');
 const { sendAskQuotaError, getUserUsage } = require('./ask-quota');
 const { extractPdf } = require('./pdf');
 const { extractPhoto } = require('./ocr');
+const { readDocument, uploadName, getUploadMime, logRejectedUpload } = require('./document-upload');
+const { isInScope, emptyScopeAnswer } = require('./query-scope');
 const { requireUser } = require('./auth');
 const chatStore = require('./chat-store');
 const RequestError = require('./request-error');
 
 const router = express.Router();
 const activityByChat = new Map();
-const readFile = express.raw({
-  type: ['application/pdf', 'image/jpeg', 'image/png'],
-  limit: '5mb',
-  inflate: false,
-});
 const readJson = express.json({ limit: '256kb' });
 
 function activityKey(ownerId, chatId) {
@@ -68,14 +64,25 @@ router.get('/', (_request, response) => {
   response.json(chatStore.listChats(response.locals.user.id));
 });
 
-router.get('/quota', (_request, response) => {
+router.get('/quota', async (_request, response) => {
   const userId = response.locals.user.id;
-  response.json(getUserUsage(userId));
+  response.json(await getUserUsage(userId));
 });
+
+function requireUploadRoute(body, response) {
+  const attachments = body?.attachments;
+  if (attachments?.pdf != null || attachments?.photo != null ||
+    (Array.isArray(body?.messages) && body.messages.some(message =>
+      Array.isArray(message?.attachments) && message.attachments.some(file => file?.file || file?.dataUrl)))) {
+    logRejectedUpload(response, 'chat-document', 415);
+    throw new RequestError(415, 'Upload document files through the chat attachment endpoint.');
+  }
+}
 
 router.post('/', readJson, (request, response) => {
   const { id: ownerId } = response.locals.user;
   const initialData = request.body || {};
+  requireUploadRoute(initialData, response);
   response.status(201).json(chatResponse(ownerId, chatStore.createChat(ownerId, initialData)));
 });
 
@@ -93,6 +100,7 @@ router.put('/:chatId', readJson, (request, response) => {
   const { id: ownerId } = response.locals.user;
   const { chatId } = request.params;
   requireIdle(ownerId, chatId);
+  requireUploadRoute(request.body, response);
   const updated = chatStore.updateFullChat(ownerId, chatId, request.body || {});
   response.json(chatResponse(ownerId, updated));
 });
@@ -106,26 +114,14 @@ router.delete('/:chatId', (request, response) => {
   response.json({ id: chatId });
 });
 
-router.post('/:chatId/document', readFile, async (request, response) => {
+router.post('/:chatId/document', readDocument, async (request, response) => {
   const { id: ownerId } = response.locals.user;
   const { chatId } = request.params;
   requireIdle(ownerId, chatId);
   const chat = chatStore.readChat(ownerId, chatId);
-  if (!Buffer.isBuffer(request.body) || !request.body.length) {
-    throw new RequestError(400, 'Choose one PDF, JPG, JPEG, or PNG.');
-  }
-
-  let name;
-  try {
-    name = win32.basename(decodeURIComponent(request.get('X-File-Name') || '')).trim();
-  } catch {
-    throw new RequestError(400, 'Choose a file with a valid name.');
-  }
-  if (!name || name.length > 255 || /[\x00-\x1f\x7f]/u.test(name)) {
-    throw new RequestError(400, 'Choose a file with a valid name.');
-  }
-
-  const kind = request.is('application/pdf') ? 'pdf' : 'photo';
+  const name = uploadName(request);
+  const mimeType = getUploadMime(request);
+  const kind = mimeType === 'application/pdf' ? 'pdf' : 'photo';
   const activity = beginActivity(ownerId, chatId, 'extracting');
   activity.uploads[kind] = { name, status: 'processing' };
   let failure;
@@ -134,7 +130,7 @@ router.post('/:chatId/document', readFile, async (request, response) => {
     try {
       pages = kind === 'pdf'
         ? await extractPdf(request.body)
-        : [{ pageNumber: 1, text: await extractPhoto(request.body) }];
+        : [{ pageNumber: 1, text: await extractPhoto(request.body, mimeType) }];
     } catch (error) {
       failure = error instanceof RequestError ? error : new RequestError(500, 'Could not extract text from this file. Try again.');
       activity.uploads[kind] = { name, status: 'failed', error: failure.message };
@@ -149,7 +145,10 @@ router.post('/:chatId/document', readFile, async (request, response) => {
     finishActivity(ownerId, chatId, activity);
   }
   const view = chatResponse(ownerId, chat);
-  if (failure) return response.status(failure.status).json({ error: failure.message, chat: view });
+  if (failure) {
+    logRejectedUpload(response, 'chat-document', failure.status);
+    return response.status(failure.status).json({ error: failure.message, chat: view });
+  }
   response.json(view);
 });
 
@@ -204,10 +203,17 @@ router.post('/:chatId/messages', readJson, async (request, response) => {
   const mode = request.body.mode ?? 'document';
   if (mode !== 'document' && mode !== 'legal') throw new RequestError(400, 'Choose Attachments or Legal search.');
 
+  const history = chat.messages.filter(message => (message.mode ?? 'document') === mode);
+  const attachments = Object.values(chat.attachments).filter(Boolean);
+  if (!isInScope(question, {
+    hasDocument: attachments.length > 0,
+    previousQuestion: history.findLast(message => message.role === 'user')?.content,
+  })) {
+    return response.json({ ...chatResponse(ownerId, chat), ...emptyScopeAnswer });
+  }
+
   const activity = beginActivity(ownerId, chatId, 'answering');
   try {
-    const history = chat.messages.filter(message => (message.mode ?? 'document') === mode);
-    const attachments = Object.values(chat.attachments).filter(Boolean);
     const answer = mode === 'legal'
       ? await answerLegalQuestion(ownerId, question, history, attachments)
       : await answerChatQuestion(ownerId, question, attachments, history);
@@ -231,6 +237,9 @@ router.post('/:chatId/messages', readJson, async (request, response) => {
 router.use((error, request, response, next) => {
   if (response.headersSent) return next(error);
   if (sendAskQuotaError(error, response)) return;
+  if (request.method === 'POST' && /\/document\/?$/.test(request.path)) {
+    logRejectedUpload(response, 'chat-document', error.status || 500);
+  }
   if (error.type === 'entity.too.large') {
     const message = request.is('application/json') ? 'The text is too large.' : 'The file must be 5 MB or smaller.';
     return response.status(413).json({ error: message });
@@ -243,10 +252,5 @@ function getUserChatCount(userId) {
   return chatStore.getUserChatCount(userId);
 }
 
-function deleteUserChats(userId) {
-  chatStore.deleteUserChats(userId);
-}
-
 module.exports = router;
 module.exports.getUserChatCount = getUserChatCount;
-module.exports.deleteUserChats = deleteUserChats;

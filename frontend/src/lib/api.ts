@@ -79,14 +79,28 @@ export const serverApi = {
 
   /** Role-based Authentication endpoints */
   auth: {
+    async beginGoogleSignIn(acknowledgeScope: boolean): Promise<{ url: string }> {
+      const response = await fetch('/api/auth/google/start', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ acknowledgeScope }),
+      });
+      const result: { url?: string; error?: string } = await response.json();
+      if (!response.ok || !result.url) throw new Error(result.error || 'Google sign-in is unavailable.');
+      return { url: result.url };
+    },
+
     async getSession(): Promise<{ user: ServerUser | null }> {
       return apiRequest<{ user: ServerUser | null }>('/api/auth/session');
     },
 
     async register(credentials: {
+      name: string;
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return apiRequest<{ user: ServerUser }>('/api/auth/register', {
         method: 'POST',
@@ -99,6 +113,7 @@ export const serverApi = {
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return apiRequest<{ user: ServerUser }>('/api/auth/login', {
         method: 'POST',
@@ -111,6 +126,7 @@ export const serverApi = {
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return this.signIn(credentials);
     },
@@ -140,11 +156,11 @@ export const serverApi = {
 
   /** Statutory Audit Pipeline endpoints */
   audit: {
-    async upload(bundle: AuditBundle): Promise<UploadedFile[]> {
-      return apiRequest<UploadedFile[]>('/api/audit/upload', {
+    async upload(file: File): Promise<UploadedFile> {
+      return apiRequest<UploadedFile>('/api/audit/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bundle),
+        headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+        body: file,
       });
     },
 
@@ -314,7 +330,7 @@ export const serverApi = {
       return apiRequest<ServerAdminUser[]>('/api/admin/users');
     },
 
-    async updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<ServerAdminUser> {
+    async updateUserStatus(id: string, status: ServerAdminUser['status']): Promise<ServerAdminUser> {
       return apiRequest<ServerAdminUser>(`/api/admin/users/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -335,10 +351,6 @@ export const serverApi = {
 };
 
 // ── Live Audit Workspace Client ────────────────────────────────
-
-export async function uploadBundle(bundle: AuditBundle): Promise<UploadedFile[]> {
-  return serverApi.audit.upload(bundle);
-}
 
 export async function runAudit(
   bundle: AuditBundle,

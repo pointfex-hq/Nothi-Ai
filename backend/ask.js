@@ -1,3 +1,4 @@
+const { isInScope } = require('./query-scope');
 const express = require('express');
 const RequestError = require('./request-error');
 const { checkAskAllowance, recordAskWithoutModel, reserveAsk, sendAskQuotaError } = require('./ask-quota');
@@ -324,7 +325,11 @@ function formatCitedAnswer(answer, references, requiredKind) {
 
 askRouter.post('/', express.json({ limit: '256kb' }), async (request, response) => {
   const { question, pages } = request.body ?? {};
-  response.json({ answer: await answerQuestion(response.locals.user.id, getQuestion(question), pages) });
+  const prompt = getQuestion(question);
+  if (!isInScope(prompt, { hasDocument: Array.isArray(pages) && pages.some(page => typeof page?.text === 'string' && page.text.trim()) })) {
+    return response.json({ answer: '', citations: [], outOfScope: true });
+  }
+  response.json({ answer: await answerQuestion(response.locals.user.id, prompt, pages) });
 });
 
 askRouter.use((error, _request, response, next) => {

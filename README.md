@@ -179,17 +179,32 @@ Key variables:
 - `QDRANT_API_KEY=...` (Qdrant API key)
 - `QDRANT_LEGAL_COLLECTION=nothi-legal-official` (Qdrant statutory collection)
 
-**Configure Admin & Normal User Accounts**:
-The authentication system dynamically creates and hashes local development accounts from `.env` on startup:
-```ini
-# Administrative account (access to /api/admin/* and usage controls)
-ADMIN_EMAIL=admin
-ADMIN_PASSWORD=AdminPassword123!
+**Provision the Super Admin and optional local user**
 
+On a fresh database, set `SUPER_ADMIN_USERNAME` and `SUPER_ADMIN_PASSWORD` in `backend/.env`. Use a unique password of 16–128 characters from your team's password manager. Start the backend and verify the Super Admin can sign in. Then remove both bootstrap entries from `backend/.env` and restart. The account and password hash persist in `backend/data/auth.sqlite`. Keep the credentials in your team's approved secret-sharing tool.
+
+For an existing environment-seeded administrator, use the existing username and a fresh password to provision that account as Super Admin. Existing standard accounts cannot be promoted by bootstrap. Remove obsolete `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `NOTHI_ADMIN_USER_IDS` entries from older local configurations.
+
+Optional local user settings:
+```ini
 # Regular vetting user (access to chat, audit, OCR, PDF)
 USER_EMAIL=user
 USER_PASSWORD=UserPassword123!
 ```
+
+#### Optional Google sign-in
+
+Create a Google OAuth **Web application** client. Add
+`http://localhost:3000/api/auth/google/callback` as an authorized redirect URI.
+Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and
+`GOOGLE_OAUTH_REDIRECT_URI` in `backend/.env`, then restart the backend.
+Open the frontend using the same origin as the configured redirect URI. If the
+Google app is in testing mode, use an account on its test-user list.
+
+In production, register the public frontend's HTTPS callback URI and include that
+origin in `CLIENT_ORIGIN`. Keep the client secret on the backend. Signing in
+with Google creates a standard account on first use. Existing password accounts
+with the same email continue to use password sign-in.
 
 ### Step 3: Run the Monorepo
 Start both the Next.js frontend (`:3000`) and the Node.js backend (`:3001`) simultaneously:
@@ -251,19 +266,10 @@ Nothi AI enforces strict server-enforced role separation and authentication-firs
 - Logging in as **Admin** immediately routes to **`/admin`**.
 - Logging in as **User** immediately routes to **`/dashboard`**.
 
-### Testing Accounts from `backend/.env`
-Configure working local development credentials in `backend/.env` (gitignored):
-```ini
-# Administrator account (access to /admin and /api/admin/*)
-ADMIN_EMAIL=admin
-ADMIN_PASSWORD=AdminPassword123!
+### Local authentication
 
-# Regular vetting user (access to /dashboard, /chat, /audit)
-USER_EMAIL=user
-USER_PASSWORD=UserPassword123!
-```
+To provision a Super Admin, follow the setup steps above. Password registration and sign-in require the scope acknowledgement shown on the form.
 
----
 
 ## 6. Deploying to Vercel
 

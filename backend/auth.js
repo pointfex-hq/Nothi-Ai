@@ -1,135 +1,123 @@
 const express = require('express');
 const { randomBytes, randomUUID, scrypt, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
-const { accountsFile, auditLogsFile, readLocalJson, writeLocalJson } = require('./local-data');
+const store = require('./auth-store');
+const { recordAuditLog, getAuditLogs } = store;
+const { beginGoogleSignIn, completeGoogleSignIn } = require('./google-auth');
 const RequestError = require('./request-error');
 
 const router = express.Router();
 const readCredentials = express.json({ limit: '8kb' });
-const adminIds = new Set(
-  (process.env.NOTHI_ADMIN_USER_IDS ?? '')
-    .split(',')
-    .map(id => id.trim().toLowerCase())
-    .filter(Boolean)
-);
 const sessionCookie = 'nothi_session';
 const sessionLifetime = 12 * 60 * 60 * 1000;
-const sessions = new Map();
 const deriveKey = promisify(scrypt);
 const hashOptions = { N: 32768, r: 8, p: 3, maxmem: 64 * 1024 * 1024 };
 const fallbackSalt = randomBytes(16);
 const fallbackHash = randomBytes(64);
 
-function readAccounts() {
-  try {
-    const records = readLocalJson(accountsFile, []);
-    return new Map(records.map(account => [account.username.toLowerCase(), {
-      ...account,
-      status: account.status || 'active',
-      createdAt: account.createdAt || Date.now(),
-      isEnvAccount: Boolean(account.isEnvAccount),
-    }]));
-  } catch (error) {
-    throw new Error('Could not read the local account store.', { cause: error });
-  }
-}
-
-const accounts = readAccounts();
-
-function saveAccount(account) {
-  const normalized = account.username.toLowerCase();
-  if (accounts.has(normalized)) {
-    throw new RequestError(409, 'That username is already taken.');
-  }
-
-  const record = {
-    ...account,
-    status: account.status || 'active',
-    createdAt: account.createdAt || Date.now(),
-    isEnvAccount: Boolean(account.isEnvAccount),
-  };
-  accounts.set(normalized, record);
-  writeLocalJson(accountsFile, [...accounts.values()]);
-}
-
 // ── Environment-Driven Admin and Normal User Initialization ───
 async function initializeEnvUsers() {
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const adminPassword = process.env.ADMIN_PASSWORD?.trim();
-  if (adminEmail && adminPassword) {
-    const existing = accounts.get(adminEmail);
+  const identifier = process.env.SUPER_ADMIN_USERNAME?.trim().toLowerCase();
+  const password = process.env.SUPER_ADMIN_PASSWORD;
+  if (!store.getSuperAdmin() && (identifier || password)) {
+    if (!validIdentifier(identifier) || !validPassword(password) || password.length < 16) {
+      throw new Error('Provide a valid SUPER_ADMIN_USERNAME and a bootstrap password of 16–128 characters.');
+    }
     const salt = randomBytes(16);
-    const hash = await deriveKey(adminPassword, salt, 64, hashOptions);
-    const adminAccount = {
-      id: existing?.id || 'env-admin',
-      username: adminEmail,
-      name: existing?.name || 'Chamber Administrator',
-      salt: salt.toString('hex'),
-      hash: hash.toString('hex'),
-      role: 'admin',
-      status: existing?.status || 'active',
-      createdAt: existing?.createdAt || Date.now(),
-      isEnvAccount: true,
-    };
-    accounts.set(adminEmail, adminAccount);
-    writeLocalJson(accountsFile, [...accounts.values()]);
-    adminIds.add(adminEmail);
-    adminIds.add(adminAccount.id);
+    const hash = await deriveKey(password, salt, 64, hashOptions);
+    store.transaction(() => {
+      const seeded = store.getSuperAdmin();
+      if (seeded) return;
+      const existing = store.readAccount(identifier);
+      if (existing && !(existing.isEnvAccount && existing.role === 'admin')) {
+        throw new Error('Super Admin username belongs to an existing account.');
+      }
+      const account = {
+        id: existing?.id || randomUUID(),
+        username: identifier,
+        name: existing?.name || 'Super Admin',
+        salt: salt.toString('hex'),
+        hash: hash.toString('hex'),
+        role: 'admin',
+        status: 'active',
+        createdAt: existing?.createdAt || Date.now(),
+        isEnvAccount: true,
+      };
+      store.saveAccount(account);
+      store.revokeAccountSessions(account.id);
+      store.markSuperAdmin(account.id);
+      recordAuditLog({ action: 'SUPER_ADMIN_SEEDED', targetId: account.id, details: identifier });
+    });
   }
 
   const userEmail = process.env.USER_EMAIL?.trim().toLowerCase();
   const userPassword = process.env.USER_PASSWORD?.trim();
   if (userEmail && userPassword) {
-    const existing = accounts.get(userEmail);
+    if (store.readAccount(userEmail)) return;
     const salt = randomBytes(16);
     const hash = await deriveKey(userPassword, salt, 64, hashOptions);
     const userAccount = {
-      id: existing?.id || 'env-user',
+      id: 'env-user',
       username: userEmail,
-      name: existing?.name || 'Advocate Rafiqul Islam',
+      name: 'Advocate Rafiqul Islam',
       salt: salt.toString('hex'),
       hash: hash.toString('hex'),
       role: 'user',
-      status: existing?.status || 'active',
-      createdAt: existing?.createdAt || Date.now(),
+      status: 'active',
+      createdAt: Date.now(),
       isEnvAccount: true,
     };
-    accounts.set(userEmail, userAccount);
-    writeLocalJson(accountsFile, [...accounts.values()]);
+    store.transaction(() => {
+      if (!store.readAccount(userEmail) && !store.readAccountById(userAccount.id) &&
+        !store.wasAccountDeleted(userAccount.id, userEmail)) {
+        store.saveAccount(userAccount);
+      }
+    });
   }
 }
 
-initializeEnvUsers().catch(err => {
-  console.warn('Could not initialize environment users:', err.message);
-});
+function validEmail(value) {
+  return typeof value === 'string' && value.length <= 64 &&
+    /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i.test(value) &&
+    !value.startsWith('.') && !value.includes('..') && !value.includes('.@');
+}
 
-function getCredentials(request) {
-  const { username, email, password } = request.body ?? {};
-  const rawIdentifier = (typeof email === 'string' && email.trim()) ? email : username;
-  const normalized = typeof rawIdentifier === 'string' ? rawIdentifier.trim().toLowerCase() : '';
-  if (!normalized || normalized.length < 3 || normalized.length > 64) {
-    throw new RequestError(400, 'Enter a valid username or email address.');
+function validIdentifier(value) {
+  return validEmail(value) || (typeof value === 'string' && /^[a-z0-9][a-z0-9._-]{2,63}$/i.test(value));
+}
+
+function validPassword(value) {
+  return typeof value === 'string' && value.length >= 8 && value.length <= 128 && /\S/u.test(value);
+}
+
+function getCredentials(request, registration = false) {
+  const { username, email, password, acknowledgeScope } = request.body ?? {};
+  const raw = email ?? username;
+  const identifier = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (!(registration ? validEmail(identifier) : validIdentifier(identifier))) {
+    throw new RequestError(400, registration ? 'Enter a valid email address.' : 'Enter a valid username or email address.');
   }
-  if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+  if (!validPassword(password)) {
     throw new RequestError(400, 'Use a password between 8 and 128 characters.');
   }
-  return { username: normalized, password };
+  if (acknowledgeScope !== true) {
+    throw new RequestError(400, 'Confirm that you understand the scope of Nothi AI.');
+  }
+  return { username: identifier, password };
+}
+
+function requireEditableAccount(account) {
+  if (account.isSuperAdmin) throw new RequestError(403, 'The Super Admin account cannot be modified.');
 }
 
 function publicUser(account) {
-  const adminEmail = process.env.ADMIN_EMAIL?.trim().toLowerCase();
-  const isAdmin =
-    account.role === 'admin' ||
-    (adminEmail && account.username.toLowerCase() === adminEmail) ||
-    adminIds.has(account.id.toLowerCase()) ||
-    adminIds.has(account.username.toLowerCase());
-
   return {
     id: account.id,
     name: account.name || (account.username.split('@')[0]),
     username: account.username,
     email: account.username,
-    role: isAdmin ? 'admin' : 'user',
+    role: account.role,
+    isSuperAdmin: Boolean(account.isSuperAdmin),
     status: account.status || 'active',
     createdAt: account.createdAt || Date.now(),
     isEnvAccount: Boolean(account.isEnvAccount),
@@ -142,15 +130,15 @@ function getSessionToken(request) {
 
 function currentUser(request) {
   const token = getSessionToken(request);
-  const session = sessions.get(token);
+  const session = store.getSession(token);
   if (!session) return null;
-  if (session.expiresAt <= Date.now()) {
-    sessions.delete(token);
+  const now = Date.now();
+  if (session.expiresAt <= now) {
+    store.expireSession(token, now);
     return null;
   }
-  const account = accounts.get(session.user.username.toLowerCase());
-  if (!account || account.status === 'suspended') {
-    sessions.delete(token);
+  const account = store.readAccountById(session.accountId);
+  if (!account || account.status !== 'active') {
     return null;
   }
   return publicUser(account);
@@ -171,39 +159,90 @@ function cookieOptions(request) {
 
 function startSession(request, response, account, status) {
   const now = Date.now();
-  for (const [token, session] of sessions) {
-    if (session.expiresAt <= now) sessions.delete(token);
-  }
-
-  sessions.delete(getSessionToken(request));
   const token = randomBytes(32).toString('base64url');
-  const user = publicUser(account);
-  sessions.set(token, { user, expiresAt: now + sessionLifetime });
+  const user = store.transaction(() => {
+    if (status === 201) {
+      if (store.readAccount(account.username)) throw new RequestError(409, 'That username is already taken.');
+      store.registerAccount(account, request.body.acknowledgeScope);
+    }
+
+    const current = store.readAccountById(account.id);
+    if (!current || current.hash !== account.hash) {
+      throw new RequestError(401, 'The username or password is incorrect.');
+    }
+    if (current.status !== 'active') {
+      throw new RequestError(403, 'Your account is restricted by an administrator.');
+    }
+
+    recordSession(request, current, token, now, status === 201 ? 'USER_REGISTERED' : 'USER_LOGIN');
+    return publicUser(current);
+  });
   response.cookie(sessionCookie, token, { ...cookieOptions(request), maxAge: sessionLifetime });
   response.status(status).json({ user });
+}
+
+function recordSession(request, account, token, now, action) {
+  store.deleteExpiredSessions(now);
+  store.deleteSession(getSessionToken(request), 'SESSION_REPLACED', now);
+  store.createSession(token, account.id, now, now + sessionLifetime);
+  recordAuditLog({ action, targetId: account.id, details: account.username });
+}
+
+async function handleGoogleCallback(request, response) {
+  const { profile, origin } = await completeGoogleSignIn(request, response);
+  const email = profile.email.trim().toLowerCase();
+  if (!validEmail(email)) throw new RequestError(400, 'Google returned an unsupported email address.');
+
+  const token = randomBytes(32).toString('base64url');
+  const now = Date.now();
+  store.transaction(() => {
+    let account = store.findGoogleAccount(profile.sub);
+    if (account) {
+      if (account.status !== 'active' || account.role !== 'user' || account.isSuperAdmin) {
+        throw new RequestError(403, 'Google sign-in is unavailable for this account.');
+      }
+    } else {
+      if (store.readAccount(email)) {
+        throw new RequestError(409, 'An account already uses this email. Sign in with your existing method.');
+      }
+      const displayName = typeof profile.name === 'string'
+        ? profile.name.replace(/[\p{Cc}]/gu, '').trim().slice(0, 80)
+        : '';
+      account = {
+        id: randomUUID(), username: email, name: displayName || email.split('@')[0],
+        salt: randomBytes(16).toString('hex'), hash: randomBytes(64).toString('hex'),
+        role: 'user', status: 'active', createdAt: now, isEnvAccount: false,
+      };
+      store.registerGoogleAccount(account, profile.sub);
+      recordAuditLog({ action: 'USER_REGISTERED', targetId: account.id, details: account.username });
+    }
+    recordSession(request, account, token, now, 'GOOGLE_LOGIN');
+  });
+
+  response.cookie(sessionCookie, token, { ...cookieOptions(request), maxAge: sessionLifetime });
+  response.redirect(303, new URL('/dashboard', origin).href);
 }
 
 function requireUser(request, response, next) {
   const token = getSessionToken(request);
   if (!token) return response.status(401).json({ error: 'Sign in to continue.' });
 
-  const session = sessions.get(token);
-  if (!session || session.expiresAt <= Date.now()) {
-    if (session) sessions.delete(token);
+  const session = store.getSession(token);
+  const now = Date.now();
+  if (!session || session.expiresAt <= now) {
+    if (session) store.expireSession(token, now);
     return response.status(401).json({ error: 'Sign in to continue.' });
   }
 
-  const account = accounts.get(session.user.username.toLowerCase());
+  const account = store.readAccountById(session.accountId);
   if (!account) {
-    sessions.delete(token);
     response.clearCookie(sessionCookie, cookieOptions(request));
     return response.status(401).json({ error: 'Your account no longer exists.' });
   }
 
-  if (account.status === 'suspended') {
-    sessions.delete(token);
+  if (account.status !== 'active') {
     response.clearCookie(sessionCookie, cookieOptions(request));
-    return response.status(403).json({ error: 'Your account has been suspended by an administrator.' });
+    return response.status(403).json({ error: 'Your account is restricted by an administrator.' });
   }
 
   response.locals.user = publicUser(account);
@@ -211,15 +250,19 @@ function requireUser(request, response, next) {
 }
 
 async function handleRegister(request, response) {
-  const { username, password } = getCredentials(request);
-  if (accounts.has(username)) throw new RequestError(409, 'That username is already taken.');
+  const { username, password } = getCredentials(request, true);
+  const name = typeof request.body.name === 'string' ? request.body.name.trim() : '';
+  if (!name || name.length > 80 || /[\p{Cc}]/u.test(name)) {
+    throw new RequestError(400, 'Enter a name between 1 and 80 characters.');
+  }
+  if (store.readAccount(username)) throw new RequestError(409, 'That username is already taken.');
 
   const salt = randomBytes(16);
   const hash = await deriveKey(password, salt, 64, hashOptions);
   const account = {
     id: randomUUID(),
     username,
-    name: (typeof request.body?.name === 'string' && request.body.name.trim()) ? request.body.name.trim().slice(0, 80) : username.split('@')[0],
+    name,
     salt: salt.toString('hex'),
     hash: hash.toString('hex'),
     role: 'user',
@@ -227,53 +270,62 @@ async function handleRegister(request, response) {
     createdAt: Date.now(),
     isEnvAccount: false,
   };
-  saveAccount(account);
   startSession(request, response, account, 201);
 }
 
 async function handleSignIn(request, response) {
   const { username, password } = getCredentials(request);
-  const account = accounts.get(username);
+  const account = store.readAccount(username);
   const salt = account ? Buffer.from(account.salt, 'hex') : fallbackSalt;
   const expected = account ? Buffer.from(account.hash, 'hex') : fallbackHash;
   const hash = await deriveKey(password, salt, 64, hashOptions);
-  if (!timingSafeEqual(hash, expected) || !account) {
+  if (!timingSafeEqual(hash, expected) || !account || store.isGoogleAccount(account.id)) {
     throw new RequestError(401, 'The username or password is incorrect.');
-  }
-  if (account.status === 'suspended') {
-    throw new RequestError(403, 'Your account has been suspended by an administrator.');
   }
   startSession(request, response, account, 200);
 }
 
 function handleSignOut(request, response) {
-  sessions.delete(getSessionToken(request));
+  const token = getSessionToken(request);
+  store.transaction(() => store.deleteSession(token, 'USER_LOGOUT'));
   response.clearCookie(sessionCookie, cookieOptions(request));
   response.json({ user: null });
 }
 
 // ── Profile and Security Update Endpoint ───
-router.patch('/profile', requireUser, express.json({ limit: '8kb' }), async (request, response) => {
+router.get('/settings', requireUser, (_request, response) => {
+  response.json({ user: response.locals.user });
+});
+
+router.patch(['/profile', '/settings'], requireUser, readCredentials, async (request, response) => {
   const user = response.locals.user;
-  const account = accounts.get(user.username.toLowerCase());
+  const account = store.readAccount(user.username.toLowerCase());
   if (!account) throw new RequestError(404, 'Account not found.');
 
+  requireEditableAccount(account);
+  const originalHash = account.hash;
   const { name, currentPassword, newPassword } = request.body || {};
 
   // Display Name Update
-  if (typeof name === 'string' && name.trim()) {
-    account.name = name.trim().slice(0, 80);
+  if (name !== undefined) {
+    if (typeof name !== 'string' || !name.trim() || name.trim().length > 80 || /[\p{Cc}]/u.test(name)) {
+      throw new RequestError(400, 'Enter a name between 1 and 80 characters.');
+    }
+    account.name = name.trim();
   }
 
   // Password Update
-  if (newPassword) {
+  if (newPassword !== undefined) {
+    if (store.isGoogleAccount(account.id)) {
+      throw new RequestError(400, 'Manage your Google password through your Google account.');
+    }
     if (account.isEnvAccount) {
       throw new RequestError(400, 'Password for environment-seeded accounts is managed via .env configuration.');
     }
-    if (typeof newPassword !== 'string' || newPassword.length < 8 || newPassword.length > 128) {
+    if (!validPassword(newPassword)) {
       throw new RequestError(400, 'Use a new password between 8 and 128 characters.');
     }
-    if (typeof currentPassword !== 'string' || !currentPassword) {
+    if (!validPassword(currentPassword)) {
       throw new RequestError(400, 'Enter your current password to confirm changes.');
     }
 
@@ -290,24 +342,34 @@ router.patch('/profile', requireUser, express.json({ limit: '8kb' }), async (req
     account.hash = newHash.toString('hex');
   }
 
-  accounts.set(account.username.toLowerCase(), account);
-  writeLocalJson(accountsFile, [...accounts.values()]);
+  const updated = store.updateProfile(account, originalHash);
+  if (!updated) throw new RequestError(409, 'Your account changed. Sign in again to continue.');
+  response.json({ user: publicUser(updated) });
+});
 
-  const updatedUser = publicUser(account);
-  // Update session references
-  for (const session of sessions.values()) {
-    if (session.user.id === account.id) {
-      session.user = updatedUser;
-    }
-  }
+router.get('/sessions', requireUser, (request, response) => {
+  const currentId = store.getSession(getSessionToken(request))?.id;
+  const sessions = store.listSessions(response.locals.user.id, Date.now());
+  response.json({ sessions: sessions.map(session => ({ ...session, current: session.id === currentId })) });
+});
 
-  response.json({ user: updatedUser });
+router.delete('/sessions/:id', requireUser, (request, response) => {
+  const user = response.locals.user;
+  const { id } = request.params;
+  const currentId = store.getSession(getSessionToken(request))?.id;
+  store.transaction(() => {
+    if (!store.revokeSession(user.id, id, Date.now())) throw new RequestError(404, 'Active session not found.');
+  });
+  if (currentId === id) response.clearCookie(sessionCookie, cookieOptions(request));
+  response.json({ id });
 });
 
 router.get('/session', (request, response) => {
   response.json({ user: currentUser(request) });
 });
 
+router.post('/google/start', readCredentials, beginGoogleSignIn);
+router.get('/google/callback', handleGoogleCallback);
 router.post('/register', readCredentials, handleRegister);
 router.post('/sign-in', readCredentials, handleSignIn);
 router.post('/signin', readCredentials, handleSignIn);
@@ -330,94 +392,54 @@ router.use((error, _request, response, next) => {
 
 // ── Admin Lifecycle Operations ───
 function listUsers() {
-  return [...accounts.values()].map(publicUser);
+  return store.listAccounts().map(publicUser);
 }
 
-function updateUserStatus(userId, status, actorId) {
-  const account = [...accounts.values()].find(a => a.id === userId);
+function getModerationTarget(id) {
+  const account = store.readAccountById(id);
   if (!account) throw new RequestError(404, 'User account not found.');
+  requireEditableAccount(account);
+  if (account.role !== 'user') throw new RequestError(403, 'Only standard user accounts can be moderated.');
+  return account;
+}
 
-  if (account.isEnvAccount && account.role === 'admin') {
-    throw new RequestError(400, 'Cannot modify status of root environment administrator.');
-  }
+const moderationEvents = {
+  active: 'USER_REACTIVATED',
+  suspended: 'USER_SUSPENDED',
+  banned: 'USER_BANNED',
+};
 
-  if (status !== 'active' && status !== 'suspended') {
-    throw new RequestError(400, 'Status must be active or suspended.');
-  }
-
-  account.status = status;
-  accounts.set(account.username.toLowerCase(), account);
-  writeLocalJson(accountsFile, [...accounts.values()]);
-
-  recordAuditLog({
-    action: status === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
-    adminId: actorId,
-    targetId: userId,
-    details: `Account ${account.username} marked ${status}`,
+function updateUserStatus(userId, status, actorId) {
+  return store.transaction(() => {
+    const account = getModerationTarget(userId);
+    if (typeof status !== 'string' || !Object.hasOwn(moderationEvents, status)) {
+      throw new RequestError(400, 'Status must be active, suspended, or banned.');
+    }
+    if (account.status === status) return publicUser(account);
+    store.setStatus(userId, status);
+    recordAuditLog({
+      action: moderationEvents[status], adminId: actorId, targetId: userId,
+      details: `Account ${account.username} marked ${status}`,
+    });
+    return publicUser(store.readAccountById(userId));
   });
-
-  return publicUser(account);
 }
 
 function deleteUser(userId, actorId) {
-  const account = [...accounts.values()].find(a => a.id === userId);
-  if (!account) throw new RequestError(404, 'User account not found.');
-
-  if (account.isEnvAccount) {
-    throw new RequestError(400, 'Cannot delete an environment-provisioned account.');
-  }
-
-  if (account.role === 'admin') {
-    throw new RequestError(400, 'Cannot delete administrator accounts.');
-  }
-
-  accounts.delete(account.username.toLowerCase());
-  writeLocalJson(accountsFile, [...accounts.values()]);
-
-  // Invalidate any active sessions
-  for (const [token, sess] of sessions.entries()) {
-    if (sess.user.id === userId || sess.user.username.toLowerCase() === account.username.toLowerCase()) {
-      sessions.delete(token);
-    }
-  }
-
-  recordAuditLog({
-    action: 'USER_DELETED',
-    adminId: actorId,
-    targetId: userId,
-    details: `Account ${account.username} permanently deleted`,
+  return store.transaction(() => {
+    const account = getModerationTarget(userId);
+    store.deleteAccount(userId);
+    recordAuditLog({
+      action: 'USER_DELETED', adminId: actorId, targetId: userId,
+      details: `Account ${account.username} permanently deleted`,
+    });
+    return { success: true, id: userId };
   });
-
-  return { success: true, id: userId };
-}
-
-// ── Admin Audit Logging Store ───
-function recordAuditLog({ action, adminId, targetId, details }) {
-  try {
-    const logs = readLocalJson(auditLogsFile, []);
-    const entry = {
-      id: randomUUID(),
-      action,
-      adminId,
-      targetId: targetId || null,
-      details: details || '',
-      timestamp: Date.now(),
-    };
-    logs.unshift(entry);
-    writeLocalJson(auditLogsFile, logs.slice(0, 100));
-    return entry;
-  } catch (err) {
-    console.warn('Failed to record audit log:', err.message);
-    return null;
-  }
-}
-
-function getAuditLogs() {
-  return readLocalJson(auditLogsFile, []);
 }
 
 module.exports = {
   authRouter: router,
+  initializeEnvUsers,
   requireUser,
   listUsers,
   updateUserStatus,

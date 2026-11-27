@@ -8,7 +8,7 @@ try {
 }
 
 const express = require('express');
-const { authRouter, requireUser } = require('./auth');
+const { authRouter, requireUser, initializeEnvUsers } = require('./auth');
 const adminRouter = require('./admin');
 const { askRouter } = require('./ask');
 const { ocrRouter } = require('./ocr');
@@ -118,11 +118,16 @@ app.use((error, _request, response, _next) => {
   response.status(status).json({ error: message });
 });
 
-app.listen(port, host, error => {
-  if (error) {
-    console.error(`Could not start Nothi AI at http://${host}:${port} (${error.code ?? 'unknown error'}).`);
-    process.exitCode = 1;
-    return;
-  }
-  console.log(`Server listening at http://${host}:${port}`);
+initializeEnvUsers().then(() => {
+  app.listen(port, host, error => {
+    if (error) {
+      console.error(`Could not start Nothi AI at http://${host}:${port} (${error.code ?? 'unknown error'}).`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log(`Server listening at http://${host}:${port}`);
+  });
+}).catch(error => {
+  console.error('Could not start Nothi AI:', error.message);
+  process.exitCode = 1;
 });

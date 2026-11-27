@@ -67,7 +67,6 @@ const updateChatDirect = database.prepare(`
   WHERE owner_id = ? AND id = ?
 `);
 const deleteChatRow = database.prepare('DELETE FROM chats WHERE owner_id = ? AND id = ?');
-const deleteUserChatsRow = database.prepare('DELETE FROM chats WHERE owner_id = ?');
 const countUserChats = database.prepare('SELECT COUNT(*) AS count FROM chats WHERE owner_id = ?');
 const findChatAnyOwner = database.prepare('SELECT owner_id, id, title FROM chats WHERE id = ? LIMIT 1');
 const insertMessage = database.prepare(`
@@ -235,10 +234,6 @@ function deleteChat(ownerId, id) {
   }
 }
 
-function deleteUserChats(ownerId) {
-  deleteUserChatsRow.run(ownerId);
-}
-
 function getUserChatCount(ownerId) {
   const row = countUserChats.get(ownerId);
   return row ? row.count : 0;
@@ -260,7 +255,6 @@ module.exports = {
   saveAttachment,
   appendMessages,
   deleteChat,
-  deleteUserChats,
   getUserChatCount,
   findChatGlobally,
   updateFullChat,

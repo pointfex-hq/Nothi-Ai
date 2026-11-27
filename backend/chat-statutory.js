@@ -1,4 +1,6 @@
 const express = require('express');
+const { isInScope, emptyScopeAnswer } = require('./query-scope');
+const RequestError = require('./request-error');
 
 const router = express.Router();
 
@@ -277,9 +279,17 @@ function generateStatutoryResponse(prompt, lang = 'en', attachments = []) {
 
 router.post('/', express.json({ limit: '2mb' }), (req, res) => {
   const { messages = [], lang = 'en', attachments = [] } = req.body ?? {};
-  const lastUserMessage = [...messages].reverse().find((m) => m.role === 'user');
-  const prompt = lastUserMessage?.content || '';
-  const userAttachments = lastUserMessage?.attachments || attachments;
+  if (!Array.isArray(messages) || !Array.isArray(attachments)) throw new RequestError(400, 'Invalid chat request.');
+  const userMessages = messages.filter(message => message?.role === 'user');
+  const lastUserMessage = userMessages.at(-1);
+  const prompt = lastUserMessage?.content;
+  const userAttachments = lastUserMessage?.attachments ?? attachments;
+  if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 2000 || !Array.isArray(userAttachments)) {
+    throw new RequestError(400, 'Enter a question of 1 to 2,000 characters.');
+  }
+  if (!isInScope(prompt, {
+    hasDocument: userAttachments.length > 0, previousQuestion: userMessages.at(-2)?.content,
+  })) return res.json(emptyScopeAnswer);
   const result = generateStatutoryResponse(prompt, lang, userAttachments);
   res.json(result);
 });

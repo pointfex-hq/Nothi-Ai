@@ -114,10 +114,11 @@ export function useAuth() {
       .getSession()
       .then(({ user: serverUser }) => {
         if (serverUser) {
-          const current = getStoredUser();
+          const cached = getStoredUser();
+          const current = cached?.id === serverUser.id ? cached : null;
           const updated: NothiUser = {
             id: serverUser.id,
-            name: current?.name || serverUser.username.split('@')[0],
+            name: serverUser.name || serverUser.username.split('@')[0],
             email: serverUser.username,
             chamber: current?.chamber || (serverUser.role === 'admin' ? 'Chamber Administrator' : 'Chamber Counsel'),
             plan: serverUser.role === 'admin' ? 'pro' : 'basic',
@@ -133,10 +134,11 @@ export function useAuth() {
       });
   }, []);
 
-  const signIn = async (credentials: { email: string; password: string; name?: string; chamber?: string }) => {
+  const signIn = async (credentials: { email: string; password: string; acknowledgeScope: boolean; name?: string; chamber?: string }) => {
     const { user: serverUser } = await serverApi.auth.signIn({
       username: credentials.email,
       password: credentials.password,
+      acknowledgeScope: credentials.acknowledgeScope,
     });
 
     const displayName =
@@ -156,10 +158,12 @@ export function useAuth() {
     return authUser;
   };
 
-  const register = async (credentials: { email: string; password: string; name?: string; chamber?: string }) => {
+  const register = async (credentials: { email: string; password: string; acknowledgeScope: boolean; name: string; chamber?: string }) => {
     const { user: serverUser } = await serverApi.auth.register({
-      username: credentials.email,
+      email: credentials.email,
+      name: credentials.name,
       password: credentials.password,
+      acknowledgeScope: credentials.acknowledgeScope,
     });
 
     const displayName =

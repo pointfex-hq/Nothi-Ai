@@ -1,31 +1,13 @@
 const express = require('express');
-const sharp = require('sharp');
 const { createWorker, OEM } = require('tesseract.js');
 const { langPath } = require('@tesseract.js-data/eng');
 const RequestError = require('./request-error');
 
+const { readImage, uploadName, getUploadMime, prepareImage, uploadErrors } = require('./document-upload');
 const ocrRouter = express.Router();
-const readPhoto = express.raw({ type: ['image/jpeg', 'image/png'], limit: '5mb', inflate: false });
-const invalidPhoto = 'This image could not be read. Choose a valid JPG, JPEG, or PNG photo.';
 
-async function extractPhoto(bytes) {
-  let image;
-  try {
-    const photo = sharp(bytes);
-    const { format, pages } = await photo.metadata();
-    if (!['jpeg', 'png'].includes(format) || pages > 1) {
-      throw new Error('Unsupported photo format.');
-    }
-
-    image = await photo.autoOrient()
-      .resize({ width: 3000, height: 3000, fit: 'inside', withoutEnlargement: true })
-      .flatten({ background: '#ffffff' })
-      .png()
-      .toBuffer();
-  } catch {
-    throw new RequestError(422, invalidPhoto);
-  }
-
+async function extractPhoto(bytes, mimeType) {
+  const image = await prepareImage(bytes, mimeType);
   let worker;
   let text;
   try {
@@ -49,20 +31,11 @@ async function extractPhoto(bytes) {
   return text;
 }
 
-ocrRouter.post('/', readPhoto, async (request, response) => {
-  if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
-    throw new RequestError(400, 'Choose one JPG, JPEG, or PNG photo.');
-  }
-  response.json({ text: await extractPhoto(request.body) });
+ocrRouter.post('/', readImage, async (request, response) => {
+  uploadName(request, false);
+  response.json({ text: await extractPhoto(request.body, getUploadMime(request)) });
 });
 
-ocrRouter.use((error, _request, response, next) => {
-  if (response.headersSent) return next(error);
-  if (error.type === 'entity.too.large') {
-    return response.status(413).json({ error: 'The photo must be 5 MB or smaller.' });
-  }
-  const message = error instanceof RequestError ? error.message : 'The photo upload could not be processed.';
-  response.status(error.status || 500).json({ error: message });
-});
+ocrRouter.use(uploadErrors('ocr'));
 
 module.exports = { ocrRouter, extractPhoto };

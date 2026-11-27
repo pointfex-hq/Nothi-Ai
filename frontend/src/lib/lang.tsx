@@ -47,7 +47,7 @@ const translations: Translations = {
   'audit.citations':   { en: 'Citation Inspector',      bn: 'উদ্ধৃতি পরিদর্শক' },
   'audit.memo':        { en: 'Vetting Memorandum',       bn: 'যাচাই স্মারক' },
   'audit.upload':      { en: 'Upload documents or load a benchmark packet', bn: 'দলিল আপলোড করুন অথবা একটি বেঞ্চমার্ক প্যাকেট লোড করুন' },
-  'audit.dragdrop':    { en: 'Drop PDF, JPG or PNG files here (max 15 MB each, up to 3 files)', bn: 'এখানে PDF, JPG বা PNG ফাইল ড্রপ করুন (প্রতিটি সর্বোচ্চ ১৫ এমবি, সর্বোচ্চ ৩টি ফাইল)' },
+  'audit.dragdrop':    { en: 'Drop PDF, JPG, PNG, or WebP files here (max 5 MB each, up to 3 files)', bn: 'এখানে PDF, JPG, PNG বা WebP ফাইল ড্রপ করুন (প্রতিটি সর্বোচ্চ ৫ এমবি, সর্বোচ্চ ৩টি ফাইল)' },
   'audit.packetA':     { en: 'Load Packet A (Compliant)', bn: 'প্যাকেট এ লোড করুন (সম্মত)' },
   'audit.packetB':     { en: 'Load Packet B (3 Planted Defects)', bn: 'প্যাকেট বি লোড করুন (৩টি ত্রুটি)' },
   'audit.run':         { en: 'Run Audit',               bn: 'নিরীক্ষা চালান' },

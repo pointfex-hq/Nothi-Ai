@@ -34,12 +34,12 @@ export default function AdminPanelPage() {
   const [users, setUsers] = useState<ServerAdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [userStatusFilter, setUserStatusFilter] = useState<'all' | 'active' | 'suspended'>('all');
+  const [userStatusFilter, setUserStatusFilter] = useState<'all' | ServerAdminUser['status']>('all');
 
   // User Lifecycle Action Modals
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
-    type: 'suspend' | 'reactivate' | 'delete';
+    type: 'suspend' | 'ban' | 'reactivate' | 'delete';
     targetUser: ServerAdminUser | null;
   }>({
     isOpen: false,
@@ -210,12 +210,13 @@ export default function AdminPanelPage() {
     const target = confirmModal.targetUser;
     setActionLoading(true);
     try {
-      if (confirmModal.type === 'suspend') {
-        const updated = await serverApi.admin.updateUserStatus(target.id, 'suspended');
+      if (confirmModal.type === 'suspend' || confirmModal.type === 'ban') {
+        const status = confirmModal.type === 'ban' ? 'banned' : 'suspended';
+        const updated = await serverApi.admin.updateUserStatus(target.id, status);
         setUsers((prev) => prev.map((u) => (u.id === target.id ? { ...u, status: updated.status } : u)));
         setStatusMessage({
           type: 'success',
-          text: `Account ${target.username} has been suspended. All active sessions have been immediately revoked.`,
+          text: `Account ${target.username} has been ${status}. All active sessions have been revoked.`,
         });
       } else if (confirmModal.type === 'reactivate') {
         const updated = await serverApi.admin.updateUserStatus(target.id, 'active');
@@ -262,9 +263,7 @@ export default function AdminPanelPage() {
       u.role.toLowerCase().includes(userSearchQuery.toLowerCase());
 
     const matchesStatus =
-      userStatusFilter === 'all' ||
-      (userStatusFilter === 'active' && u.status === 'active') ||
-      (userStatusFilter === 'suspended' && u.status === 'suspended');
+      userStatusFilter === 'all' || userStatusFilter === u.status;
 
     return matchesQuery && matchesStatus;
   });
@@ -473,12 +472,13 @@ export default function AdminPanelPage() {
 
               <select
                 value={userStatusFilter}
-                onChange={(e) => setUserStatusFilter(e.target.value as 'all' | 'active' | 'suspended')}
+                onChange={(e) => setUserStatusFilter(e.target.value as 'all' | ServerAdminUser['status'])}
                 className="px-3 py-1.5 rounded-full border border-border bg-paper text-ink text-xs font-sans focus:outline-hidden focus:border-brass"
               >
                 <option value="all">{lang === 'bn' ? 'সকল স্ট্যাটাস' : 'All Statuses'}</option>
                 <option value="active">{lang === 'bn' ? 'সক্রিয় (Active)' : 'Active Only'}</option>
                 <option value="suspended">{lang === 'bn' ? 'স্থগিত (Suspended)' : 'Suspended Only'}</option>
+                <option value="banned">{lang === 'bn' ? 'নিষিদ্ধ (Banned)' : 'Banned Only'}</option>
               </select>
             </div>
           </div>
@@ -500,6 +500,7 @@ export default function AdminPanelPage() {
                     <th className="py-3 px-4">Role</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4">Private Chats</th>
+                    <th className="py-3 px-4">Recorded Tokens Today / Total</th>
                     <th className="py-3 px-4">Created Date</th>
                     <th className="py-3 px-4 text-right">Lifecycle Actions</th>
                   </tr>
@@ -507,7 +508,6 @@ export default function AdminPanelPage() {
                 <tbody className="divide-y divide-border/60">
                   {filteredUsers.map((u) => {
                     const isCurrentAdmin = u.id === user?.id;
-                    const isRootEnvAdmin = u.isEnvAccount && u.role === 'admin';
 
                     return (
                       <tr key={u.id} className="hover:bg-paper/60 transition-colors">
@@ -556,14 +556,14 @@ export default function AdminPanelPage() {
                         <td className="py-3.5 px-4">
                           <span
                             className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full border ${
-                              u.status === 'suspended'
+                              u.status !== 'active'
                                 ? 'bg-rose-100 text-rose-900 border-rose-300'
                                 : 'bg-emerald-100 text-emerald-900 border-emerald-300'
                             }`}
                           >
                             <span
                               className={`w-1.5 h-1.5 rounded-full ${
-                                u.status === 'suspended' ? 'bg-vermillion' : 'bg-emerald-600'
+                                u.status !== 'active' ? 'bg-vermillion' : 'bg-emerald-600'
                               }`}
                             />
                             {u.status || 'active'}
@@ -577,18 +577,22 @@ export default function AdminPanelPage() {
                           </span>
                         </td>
 
+                        <td className="py-3.5 px-4 font-mono">
+                          {u.recordedTokensToday.toLocaleString()} / {u.recordedTokensTotal.toLocaleString()}
+                        </td>
+
                         <td className="py-3.5 px-4 font-mono text-ink-muted">
                           {u.createdAt ? new Date(u.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </td>
 
                         <td className="py-3.5 px-4 text-right">
-                          {isCurrentAdmin || isRootEnvAdmin ? (
+                          {u.role === 'admin' ? (
                             <span className="text-[11px] font-mono text-ink-muted italic">
-                              Protected Root Admin
+                              Protected Admin
                             </span>
                           ) : (
                             <div className="flex items-center justify-end gap-2">
-                              {u.status === 'suspended' ? (
+                              {u.status !== 'active' ? (
                                 <button
                                   type="button"
                                   onClick={() =>
@@ -618,21 +622,23 @@ export default function AdminPanelPage() {
                                 </button>
                               )}
 
-                              {!u.isEnvAccount && (
+                              {u.status !== 'banned' && (
                                 <button
                                   type="button"
-                                  onClick={() =>
-                                    setConfirmModal({
-                                      isOpen: true,
-                                      type: 'delete',
-                                      targetUser: u,
-                                    })
-                                  }
+                                  onClick={() => setConfirmModal({ isOpen: true, type: 'ban', targetUser: u })}
                                   className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 text-rose-900 text-[11px] font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
                                 >
-                                  Delete
+                                  Ban
                                 </button>
                               )}
+
+                              <button
+                                type="button"
+                                onClick={() => setConfirmModal({ isOpen: true, type: 'delete', targetUser: u })}
+                                className="px-2.5 py-1 rounded-full border border-rose-300 bg-rose-50 text-rose-900 text-[11px] font-semibold hover:bg-rose-100 transition-colors cursor-pointer"
+                              >
+                                Delete
+                              </button>
                             </div>
                           )}
                         </td>
@@ -845,6 +851,7 @@ export default function AdminPanelPage() {
           <div className="max-w-md w-full bg-paper p-6 sm:p-8 rounded-2xl border border-brass shadow-2xl space-y-5">
             <h3 className="font-heading text-lg font-bold text-green-deep">
               {confirmModal.type === 'suspend' && 'Confirm Account Suspension'}
+              {confirmModal.type === 'ban' && 'Confirm Account Ban'}
               {confirmModal.type === 'reactivate' && 'Confirm Account Reactivation'}
               {confirmModal.type === 'delete' && 'Confirm Account Permanent Deletion'}
             </h3>
@@ -854,6 +861,12 @@ export default function AdminPanelPage() {
                 <>
                   Are you sure you want to suspend{' '}
                   <strong className="text-ink">{confirmModal.targetUser.username}</strong>? This user will be immediately logged out, active session tokens will be revoked, and further access to the examination suite will be blocked.
+                </>
+              )}
+              {confirmModal.type === 'ban' && (
+                <>
+                  Ban <strong className="text-ink">{confirmModal.targetUser.username}</strong>?
+                  All active sessions will be revoked and sign-in will be blocked until reactivation.
                 </>
               )}
               {confirmModal.type === 'reactivate' && (
@@ -884,7 +897,7 @@ export default function AdminPanelPage() {
                 onClick={executeUserLifecycleAction}
                 disabled={actionLoading}
                 className={`px-5 py-2 rounded-full text-paper font-sans text-xs font-semibold shadow-sm transition-all cursor-pointer ${
-                  confirmModal.type === 'delete'
+                  (confirmModal.type === 'delete' || confirmModal.type === 'ban')
                     ? 'bg-vermillion hover:bg-rose-700'
                     : confirmModal.type === 'suspend'
                     ? 'bg-amber-600 hover:bg-amber-700'

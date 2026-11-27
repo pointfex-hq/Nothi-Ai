@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import type { UploadedFile, DocType } from '@/types';
 import { useLang } from '@/lib/lang';
+import { serverApi } from '@/lib/api';
 
 interface IntakeSectionProps {
   files: UploadedFile[];
@@ -13,8 +14,8 @@ interface IntakeSectionProps {
   selectedPacket: 'A' | 'B' | null;
 }
 
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
-const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png'];
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
+const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
 
 export function IntakeSection({
   files,
@@ -26,10 +27,12 @@ export function IntakeSection({
 }: IntakeSectionProps) {
   const { lang, t } = useLang();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function validateAndAddFiles(fileList: FileList | File[]) {
+  async function validateAndAddFiles(fileList: FileList | File[]) {
+    if (isUploading || isAuditing) return;
     setErrorMsg(null);
     const newFiles: UploadedFile[] = [...files];
 
@@ -47,8 +50,8 @@ export function IntakeSection({
       if (!ACCEPTED_TYPES.includes(f.type)) {
         setErrorMsg(
           lang === 'bn'
-            ? `ফাইল "${f.name}" গ্রহণযোগ্য নয়। কেবল PDF, JPG অথবা PNG ফাইল অনুমোদিত।`
-            : `File "${f.name}" format not accepted. Only PDF, JPG, and PNG files are allowed.`
+            ? `ফাইল "${f.name}" গ্রহণযোগ্য নয়। কেবল PDF, JPG, PNG অথবা WebP ফাইল অনুমোদিত।`
+            : `File "${f.name}" format not accepted. Only PDF, JPG, PNG, and WebP files are allowed.`
         );
         return;
       }
@@ -56,48 +59,41 @@ export function IntakeSection({
       if (f.size > MAX_FILE_SIZE) {
         setErrorMsg(
           lang === 'bn'
-            ? `ফাইল "${f.name}" ১৫ মেগাবাইট আকারের সীমা অতিক্রম করেছে।`
-            : `File "${f.name}" exceeds the maximum allowed size of 15 MB.`
+            ? `ফাইল "${f.name}" ৫ মেগাবাইট আকারের সীমা অতিক্রম করেছে।`
+            : `File "${f.name}" exceeds the maximum allowed size of 5 MB.`
         );
         return;
       }
 
-      // Auto classify based on index or name hint
-      let guessedType: DocType = 'deed';
-      const lower = f.name.toLowerCase();
-      if (lower.includes('khatian') || lower.includes('rs') || lower.includes('bs') || lower.includes('porcha')) {
-        guessedType = 'khatian';
-      } else if (lower.includes('nid') || lower.includes('national') || lower.includes('id')) {
-        guessedType = 'nid';
-      } else if (newFiles.length === 1) {
-        guessedType = 'khatian';
-      } else if (newFiles.length === 2) {
-        guessedType = 'nid';
-      }
-
-      newFiles.push({
-        id: `file-${Date.now()}-${i}`,
-        name: f.name,
-        type: guessedType,
-        size: f.size,
-        mimeType: f.type,
-      });
     }
 
-    onFilesChange(newFiles);
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(fileList)) {
+        const uploaded = await serverApi.audit.upload(file);
+        newFiles.push(uploaded);
+      }
+      onFilesChange(newFiles);
+    } catch (error) {
+      setErrorMsg(error instanceof Error ? error.message : 'Could not validate the upload.');
+    } finally {
+      setIsUploading(false);
+    }
   }
 
   function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(false);
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      validateAndAddFiles(e.dataTransfer.files);
+      void validateAndAddFiles(e.dataTransfer.files);
     }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files.length > 0) {
-      validateAndAddFiles(e.target.files);
+      const files = Array.from(e.target.files);
+      e.target.value = '';
+      void validateAndAddFiles(files);
     }
   }
 
@@ -130,7 +126,7 @@ export function IntakeSection({
           <button
             type="button"
             onClick={() => onLoadBenchmark('A')}
-            disabled={isAuditing}
+            disabled={isUploading || isAuditing}
             className={`px-3 py-1.5 text-xs font-medium rounded-sm border transition-all ${
               selectedPacket === 'A'
                 ? 'bg-flag-green text-paper border-flag-green font-semibold shadow-xs'
@@ -142,7 +138,7 @@ export function IntakeSection({
           <button
             type="button"
             onClick={() => onLoadBenchmark('B')}
-            disabled={isAuditing}
+            disabled={isUploading || isAuditing}
             className={`px-3 py-1.5 text-xs font-medium rounded-sm border transition-all ${
               selectedPacket === 'B'
                 ? 'bg-vermillion text-paper border-vermillion font-semibold shadow-xs'
@@ -173,7 +169,8 @@ export function IntakeSection({
           ref={fileInputRef}
           type="file"
           multiple
-          accept=".pdf,.jpg,.jpeg,.png"
+          accept=".pdf,.jpg,.jpeg,.png,.webp"
+          disabled={isUploading || isAuditing}
           onChange={handleFileChange}
           className="hidden"
         />
@@ -182,7 +179,7 @@ export function IntakeSection({
             {lang === 'bn' ? 'ফাইল নির্বাচন করতে ক্লিক করুন বা টেনে আনুন' : 'Click to browse or drag & drop files'}
           </p>
           <p className="text-[11px] text-ink-muted">
-            PDF, JPG, PNG • Max 15 MB / file • Up to 3 documents
+            PDF, JPG, PNG, WebP • Max 5 MB / file • Up to 3 documents
           </p>
         </div>
       </div>
@@ -262,7 +259,7 @@ export function IntakeSection({
 
         <button
           onClick={onRunAudit}
-          disabled={files.length === 0 || isAuditing}
+          disabled={files.length === 0 || isUploading || isAuditing}
           className={`px-5 py-2 text-xs font-bold uppercase tracking-wider rounded-sm transition-all ${
             files.length === 0 || isAuditing
               ? 'bg-border text-ink-muted cursor-not-allowed'
