@@ -22,6 +22,8 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [chamber, setChamber] = useState('');
+  const [registerScope, setRegisterScope] = useState(false);
+  const [signInScope, setSignInScope] = useState(false);
 
   // Sign In Form Fields
   const [signInEmail, setSignInEmail] = useState('');
@@ -53,7 +55,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       setError('Please enter a valid email address');
       return;
     }
-    if (!password || password.length < 8) {
+    if (password.length < 8 || password.length > 128) {
       setError('Password must be between 8 and 128 characters');
       return;
     }
@@ -65,6 +67,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       await register({
         email: email.trim().toLowerCase(),
         password,
+        acknowledgeScope: registerScope,
         name: name.trim(),
         chamber: chamber.trim() || undefined,
       });
@@ -96,6 +99,7 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
       const authUser = await signIn({
         email: signInEmail.trim().toLowerCase(),
         password: signInPassword,
+        acknowledgeScope: signInScope,
       });
       setIsLoading(false);
       onClose();
@@ -273,6 +277,11 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                   />
                 </div>
 
+                <label className="flex items-start gap-2 text-xs font-sans text-ink">
+                  <input type="checkbox" required checked={signInScope} onChange={(e) => setSignInScope(e.target.checked)} />
+                  <span>I understand that Nothi AI is for Bangladeshi property law and document vetting.</span>
+                </label>
+
                 <div className="pt-1">
                   <button
                     type="submit"
@@ -355,6 +364,11 @@ export function SignInModal({ isOpen, onClose, defaultTab = 'signin' }: SignInMo
                     className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-paper-light text-sm font-sans text-ink focus-visible:ring-2 focus-visible:ring-brass focus-visible:outline-hidden transition-all placeholder:text-ink-muted/50"
                   />
                 </div>
+
+                <label className="flex items-start gap-2 text-xs font-sans text-ink">
+                  <input type="checkbox" required checked={registerScope} onChange={(e) => setRegisterScope(e.target.checked)} />
+                  <span>I understand that Nothi AI is for Bangladeshi property law and document vetting.</span>
+                </label>
 
                 <div className="pt-1">
                   <button

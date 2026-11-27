@@ -84,9 +84,11 @@ export const serverApi = {
     },
 
     async register(credentials: {
+      name: string;
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return apiRequest<{ user: ServerUser }>('/api/auth/register', {
         method: 'POST',
@@ -99,6 +101,7 @@ export const serverApi = {
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return apiRequest<{ user: ServerUser }>('/api/auth/login', {
         method: 'POST',
@@ -111,6 +114,7 @@ export const serverApi = {
       username?: string;
       email?: string;
       password: string;
+      acknowledgeScope: boolean;
     }): Promise<{ user: ServerUser }> {
       return this.signIn(credentials);
     },

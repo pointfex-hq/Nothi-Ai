@@ -33,7 +33,7 @@ router.patch('/users/:id/status', express.json({ limit: '4kb' }), (request, resp
   const targetUserId = request.params.id;
   const { status } = request.body || {};
 
-  if (targetUserId === currentAdmin.id) {
+  if (targetUserId === currentAdmin.id && !currentAdmin.isSuperAdmin) {
     throw new RequestError(400, 'You cannot suspend or modify the status of your own account.');
   }
 
@@ -45,7 +45,7 @@ router.delete('/users/:id', (request, response) => {
   const currentAdmin = response.locals.user;
   const targetUserId = request.params.id;
 
-  if (targetUserId === currentAdmin.id) {
+  if (targetUserId === currentAdmin.id && !currentAdmin.isSuperAdmin) {
     throw new RequestError(400, 'You cannot delete your own account.');
   }
 

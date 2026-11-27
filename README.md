@@ -179,13 +179,14 @@ Key variables:
 - `QDRANT_API_KEY=...` (Qdrant API key)
 - `QDRANT_LEGAL_COLLECTION=nothi-legal-official` (Qdrant statutory collection)
 
-**Configure Admin & Normal User Accounts**:
-The authentication system dynamically creates and hashes local development accounts from `.env` on startup:
-```ini
-# Administrative account (access to /api/admin/* and usage controls)
-ADMIN_EMAIL=admin
-ADMIN_PASSWORD=AdminPassword123!
+**Provision the Super Admin and optional local user**
 
+On a fresh database, set `SUPER_ADMIN_USERNAME` and `SUPER_ADMIN_PASSWORD` in `backend/.env`. Use a unique password of 16–128 characters from your team's password manager. Start the backend and verify the Super Admin can sign in. Then remove both bootstrap entries from `backend/.env` and restart. The account and password hash persist in `backend/data/auth.sqlite`. Keep the credentials in your team's approved secret-sharing tool.
+
+For an existing environment-seeded administrator, use the existing username and a fresh password to provision that account as Super Admin. Existing standard accounts cannot be promoted by bootstrap. Remove obsolete `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `NOTHI_ADMIN_USER_IDS` entries from older local configurations.
+
+Optional local user settings:
+```ini
 # Regular vetting user (access to chat, audit, OCR, PDF)
 USER_EMAIL=user
 USER_PASSWORD=UserPassword123!
@@ -251,19 +252,10 @@ Nothi AI enforces strict server-enforced role separation and authentication-firs
 - Logging in as **Admin** immediately routes to **`/admin`**.
 - Logging in as **User** immediately routes to **`/dashboard`**.
 
-### Testing Accounts from `backend/.env`
-Configure working local development credentials in `backend/.env` (gitignored):
-```ini
-# Administrator account (access to /admin and /api/admin/*)
-ADMIN_EMAIL=admin
-ADMIN_PASSWORD=AdminPassword123!
+### Local authentication
 
-# Regular vetting user (access to /dashboard, /chat, /audit)
-USER_EMAIL=user
-USER_PASSWORD=UserPassword123!
-```
+To provision a Super Admin, follow the setup steps above. Password registration and sign-in require the scope acknowledgement shown on the form.
 
----
 
 ## 6. Deploying to Vercel
 
