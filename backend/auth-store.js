@@ -2,7 +2,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { closeSync, mkdirSync, openSync, readFileSync } = require('node:fs');
 const path = require('node:path');
 const { Database, DatabaseSync } = require('node:sqlite');
-const { accountsFile, auditLogsFile } = require('./local-data');
+const { accountsFile, auditLogsFile, chatsFile } = require('./local-data');
 
 const file = path.join(path.dirname(accountsFile), 'auth.sqlite');
 mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
@@ -60,7 +60,7 @@ const accountColumns = 'id, username, name, salt, hash, role, status, created_at
 
 transaction(() => {
   const { user_version: version } = db.prepare('PRAGMA user_version').get();
-  if (version >= 1 && version <= 4) return;
+  if (version >= 1 && version <= 5) return;
   if (version !== 0) throw new Error('Unsupported auth database schema version.');
   db.exec(`
     CREATE TABLE accounts (
@@ -160,6 +160,86 @@ transaction(() => {
   `);
 });
 
+transaction(() => {
+  if (db.prepare('PRAGMA user_version').get().user_version >= 5) return;
+  db.exec(`
+    ALTER TABLE accounts ADD COLUMN is_banned INTEGER NOT NULL DEFAULT 0
+      CHECK (is_banned IN (0, 1) AND (is_banned = 0 OR (role = 'user' AND status = 'suspended')));
+    CREATE TABLE admin_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      value TEXT NOT NULL CHECK (json_valid(value))
+    ) STRICT;
+    CREATE TABLE token_usage (
+      id TEXT PRIMARY KEY,
+      account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+      timestamp INTEGER NOT NULL,
+      tokens INTEGER NOT NULL CHECK (tokens >= 0),
+      reconciled INTEGER NOT NULL DEFAULT 0 CHECK (reconciled IN (0, 1))
+    ) STRICT;
+    CREATE INDEX token_usage_by_account ON token_usage(account_id, timestamp);
+    CREATE INDEX audit_events_by_target_action ON audit_events(targetId, action);
+    PRAGMA user_version = 5;
+  `);
+});
+
+function readAdminSettings() {
+  const row = db.prepare('SELECT value FROM admin_settings WHERE id = 1').get();
+  return row && JSON.parse(row.value);
+}
+
+function writeAdminSettings(settings) {
+  db.prepare(`
+    INSERT INTO admin_settings (id, value) VALUES (1, ?)
+    ON CONFLICT(id) DO UPDATE SET value = excluded.value
+  `).run(JSON.stringify(settings));
+}
+
+function wasAccountDeleted(accountId, username) {
+  return Boolean(db.prepare(`
+    SELECT 1 FROM audit_events WHERE action = 'USER_DELETED'
+    AND (targetId = ? OR details = ?) LIMIT 1
+  `).get(accountId, `Account ${username} permanently deleted`));
+}
+
+function recordTokenReservation(id, accountId, tokens, timestamp) {
+  return transaction(() => {
+    const account = readAccountById(accountId);
+    if (!account || account.status !== 'active') return undefined;
+    db.prepare('INSERT INTO token_usage (id, account_id, timestamp, tokens) VALUES (?, ?, ?, ?)')
+      .run(id, accountId, timestamp, tokens);
+    recordAuditLog({
+      action: 'TOKEN_USAGE_RESERVED', targetId: accountId, timestamp,
+      details: JSON.stringify({ reservationId: id, username: account.username, tokens }),
+    });
+    return account.username;
+  });
+}
+
+function recordTokenReconciliation(id, accountId, tokens, reported, username) {
+  return transaction(() => {
+    const updated = db.prepare('UPDATE token_usage SET tokens = ?, reconciled = 1 WHERE id = ? AND reconciled = 0')
+      .run(tokens, id);
+    // An upstream request can finish after moderation deleted its account and usage row.
+    if (!updated.changes && (readAccountById(accountId) ||
+      db.prepare('SELECT 1 FROM audit_events WHERE id = ?').get('usage-completed-' + id))) return false;
+    recordAuditLog({
+      id: 'usage-completed-' + id,
+      action: reported ? 'TOKEN_USAGE_REPORTED' : 'TOKEN_USAGE_ESTIMATED',
+      targetId: accountId,
+      details: JSON.stringify({ reservationId: id, username, tokens }),
+    });
+    return true;
+  });
+}
+
+function listRecordedTokenUsage(dayStart) {
+  return db.prepare(`
+    SELECT account_id AS accountId, TOTAL(tokens) AS recordedTokensTotal,
+      TOTAL(CASE WHEN timestamp >= ? THEN tokens ELSE 0 END) AS recordedTokensToday
+    FROM token_usage GROUP BY account_id
+  `).all(dayStart);
+}
+
 function findGoogleAccount(subject) {
   const identity = db.prepare('SELECT account_id FROM google_identities WHERE subject = ?').get(subject);
   return identity && readAccountById(identity.account_id);
@@ -193,7 +273,8 @@ function registerAccount(account, acknowledged) {
     .run(account.id, account.username, account.name, Number(acknowledged === true));
 }
 
-const currentAccountColumns = accountColumns + ', is_super_admin AS isSuperAdmin';
+const currentAccountColumns = accountColumns.replace('role, status,',
+  "role, CASE WHEN is_banned = 1 THEN 'banned' ELSE status END AS status,") + ', is_super_admin AS isSuperAdmin';
 
 function getSuperAdmin() {
   return db.prepare('SELECT ' + currentAccountColumns + ' FROM accounts WHERE is_super_admin = 1').get();
@@ -218,21 +299,30 @@ function listAccounts() {
 function updateProfile(account, originalHash) {
   const result = db.prepare(`
     UPDATE accounts SET name = ?, salt = ?, hash = ?
-    WHERE id = ? AND hash = ? AND status = 'active'
+    WHERE id = ? AND hash = ? AND status = 'active' AND is_banned = 0
   `).run(account.name, account.salt, account.hash, account.id, originalHash);
   return result.changes ? readAccountById(account.id) : undefined;
 }
 
 function setStatus(id, status) {
-  db.prepare('UPDATE accounts SET status = ? WHERE id = ?').run(status, id);
-  if (status === 'suspended') revokeAccountSessions(id);
+  const banned = status === 'banned';
+  db.prepare('UPDATE accounts SET status = ?, is_banned = ? WHERE id = ?')
+    .run(banned ? 'suspended' : status, Number(banned), id);
+  if (status !== 'active') revokeAccountSessions(id);
 }
 
 function revokeAccountSessions(id) {
   db.prepare('DELETE FROM sessions WHERE account_id = ?').run(id);
 }
 
+let chatsAttached = false;
+
 function deleteAccount(id) {
+  if (!chatsAttached) {
+    db.prepare('ATTACH DATABASE ? AS chat_data').run(chatsFile);
+    chatsAttached = true;
+  }
+  db.prepare('DELETE FROM chat_data.chats WHERE owner_id = ?').run(id);
   db.prepare('DELETE FROM accounts WHERE id = ?').run(id);
 }
 
@@ -276,6 +366,7 @@ function getAuditLogs() {
 }
 
 module.exports = {
+  readAdminSettings, writeAdminSettings, wasAccountDeleted, recordTokenReservation, recordTokenReconciliation, listRecordedTokenUsage,
   transaction, registerAccount, saveAccount, readAccount, readAccountById, listAccounts, updateProfile, setStatus, deleteAccount,
   findGoogleAccount, registerGoogleAccount, isGoogleAccount, saveGoogleAttempt, consumeGoogleAttempt,
   getSuperAdmin, markSuperAdmin, revokeAccountSessions, listSessions, revokeSession, createSession, getSession, deleteSession, deleteExpiredSessions, recordAuditLog, getAuditLogs,

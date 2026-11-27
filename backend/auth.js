@@ -68,7 +68,10 @@ async function initializeEnvUsers() {
       isEnvAccount: true,
     };
     store.transaction(() => {
-      if (!store.readAccount(userEmail) && !store.readAccountById(userAccount.id)) store.saveAccount(userAccount);
+      if (!store.readAccount(userEmail) && !store.readAccountById(userAccount.id) &&
+        !store.wasAccountDeleted(userAccount.id, userEmail)) {
+        store.saveAccount(userAccount);
+      }
     });
   }
 }
@@ -134,7 +137,7 @@ function currentUser(request) {
     return null;
   }
   const account = store.readAccountById(session.accountId);
-  if (!account || account.status === 'suspended') {
+  if (!account || account.status !== 'active') {
     store.deleteSession(token);
     return null;
   }
@@ -167,8 +170,8 @@ function startSession(request, response, account, status) {
     if (!current || current.hash !== account.hash) {
       throw new RequestError(401, 'The username or password is incorrect.');
     }
-    if (current.status === 'suspended') {
-      throw new RequestError(403, 'Your account has been suspended by an administrator.');
+    if (current.status !== 'active') {
+      throw new RequestError(403, 'Your account is restricted by an administrator.');
     }
 
     recordSession(request, current, token, now, status === 201 ? 'USER_REGISTERED' : 'USER_LOGIN');
@@ -237,10 +240,10 @@ function requireUser(request, response, next) {
     return response.status(401).json({ error: 'Your account no longer exists.' });
   }
 
-  if (account.status === 'suspended') {
+  if (account.status !== 'active') {
     store.deleteSession(token);
     response.clearCookie(sessionCookie, cookieOptions(request));
-    return response.status(403).json({ error: 'Your account has been suspended by an administrator.' });
+    return response.status(403).json({ error: 'Your account is restricted by an administrator.' });
   }
 
   response.locals.user = publicUser(account);
@@ -401,57 +404,46 @@ function listUsers() {
   return store.listAccounts().map(publicUser);
 }
 
-function updateUserStatus(userId, status, actorId) {
-  const account = store.readAccountById(userId);
+function getModerationTarget(id) {
+  const account = store.readAccountById(id);
   if (!account) throw new RequestError(404, 'User account not found.');
-
   requireEditableAccount(account);
-  if (account.isEnvAccount && account.role === 'admin') {
-    throw new RequestError(400, 'Cannot modify status of root environment administrator.');
-  }
+  if (account.role !== 'user') throw new RequestError(403, 'Only standard user accounts can be moderated.');
+  return account;
+}
 
-  if (status !== 'active' && status !== 'suspended') {
-    throw new RequestError(400, 'Status must be active or suspended.');
-  }
+const moderationEvents = {
+  active: 'USER_REACTIVATED',
+  suspended: 'USER_SUSPENDED',
+  banned: 'USER_BANNED',
+};
 
-  store.transaction(() => {
+function updateUserStatus(userId, status, actorId) {
+  return store.transaction(() => {
+    const account = getModerationTarget(userId);
+    if (typeof status !== 'string' || !Object.hasOwn(moderationEvents, status)) {
+      throw new RequestError(400, 'Status must be active, suspended, or banned.');
+    }
+    if (account.status === status) return publicUser(account);
     store.setStatus(userId, status);
     recordAuditLog({
-      action: status === 'suspended' ? 'USER_SUSPENDED' : 'USER_REACTIVATED',
-      adminId: actorId,
-      targetId: userId,
+      action: moderationEvents[status], adminId: actorId, targetId: userId,
       details: `Account ${account.username} marked ${status}`,
     });
+    return publicUser(store.readAccountById(userId));
   });
-  account.status = status;
-
-  return publicUser(account);
 }
 
 function deleteUser(userId, actorId) {
-  const account = store.readAccountById(userId);
-  if (!account) throw new RequestError(404, 'User account not found.');
-
-  requireEditableAccount(account);
-  if (account.isEnvAccount) {
-    throw new RequestError(400, 'Cannot delete an environment-provisioned account.');
-  }
-
-  if (account.role === 'admin') {
-    throw new RequestError(400, 'Cannot delete administrator accounts.');
-  }
-
-  store.transaction(() => {
+  return store.transaction(() => {
+    const account = getModerationTarget(userId);
     store.deleteAccount(userId);
     recordAuditLog({
-      action: 'USER_DELETED',
-      adminId: actorId,
-      targetId: userId,
+      action: 'USER_DELETED', adminId: actorId, targetId: userId,
       details: `Account ${account.username} permanently deleted`,
     });
+    return { success: true, id: userId };
   });
-
-  return { success: true, id: userId };
 }
 
 module.exports = {

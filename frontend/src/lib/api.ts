@@ -156,11 +156,11 @@ export const serverApi = {
 
   /** Statutory Audit Pipeline endpoints */
   audit: {
-    async upload(bundle: AuditBundle): Promise<UploadedFile[]> {
-      return apiRequest<UploadedFile[]>('/api/audit/upload', {
+    async upload(file: File): Promise<UploadedFile> {
+      return apiRequest<UploadedFile>('/api/audit/upload', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(bundle),
+        headers: { 'Content-Type': file.type, 'X-File-Name': encodeURIComponent(file.name) },
+        body: file,
       });
     },
 
@@ -330,7 +330,7 @@ export const serverApi = {
       return apiRequest<ServerAdminUser[]>('/api/admin/users');
     },
 
-    async updateUserStatus(id: string, status: 'active' | 'suspended'): Promise<ServerAdminUser> {
+    async updateUserStatus(id: string, status: ServerAdminUser['status']): Promise<ServerAdminUser> {
       return apiRequest<ServerAdminUser>(`/api/admin/users/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -351,10 +351,6 @@ export const serverApi = {
 };
 
 // ── Live Audit Workspace Client ────────────────────────────────
-
-export async function uploadBundle(bundle: AuditBundle): Promise<UploadedFile[]> {
-  return serverApi.audit.upload(bundle);
-}
 
 export async function runAudit(
   bundle: AuditBundle,

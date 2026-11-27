@@ -20,7 +20,7 @@ export function PricingSection({ showFaq = true }: { showFaq?: boolean }) {
   const FAQ_ITEMS = [
     {
       q: 'Which documents are supported in Phase 1?',
-      a: 'Phase 1 deterministically vets the primary Bangladeshi property conveyance triad: Saf Kabala deeds (সাফ কবলা), Collectorate RS and BS Khatian ledgers (আরএস ও বিএস খতিয়ান), and National ID smart cards (জাতীয় পরিচয়পত্র). PDF, JPG, and PNG formats up to 15 MB per document are supported.',
+      a: 'Phase 1 deterministically vets the primary Bangladeshi property conveyance triad: Saf Kabala deeds (সাফ কবলা), Collectorate RS and BS Khatian ledgers (আরএস ও বিএস খতিয়ান), and National ID smart cards (জাতীয় পরিচয়পত্র). PDF, JPG, PNG, and WebP formats up to 5 MB per document are supported.',
     },
     {
       q: 'How is statutory accuracy protected against AI hallucination?',

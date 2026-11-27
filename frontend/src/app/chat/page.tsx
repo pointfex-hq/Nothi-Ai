@@ -661,13 +661,13 @@ export default function ChatPage() {
     [inputText, lang]
   );
 
-  // ── 5. FILE ATTACHMENTS (MAX 3, 15MB EACH) ────────────────────
+  // ── 5. FILE ATTACHMENTS (MAX 3, 5MB EACH) ────────────────────
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
     setAttachmentError(null);
 
     const maxFiles = 3;
-    const maxSize = 15 * 1024 * 1024; // 15 MB
+    const maxSize = 5 * 1024 * 1024;
 
     if (attachments.length + files.length > maxFiles) {
       setAttachmentError(`Maximum ${maxFiles} documents allowed per message.`);
@@ -675,16 +675,16 @@ export default function ChatPage() {
     }
 
     Array.from(files).forEach((file) => {
-      const isImg = file.type.startsWith('image/');
-      const isPdf = file.type === 'application/pdf' || file.name.endsWith('.pdf');
+      const isImg = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
+      const isPdf = file.type === 'application/pdf';
 
       if (!isImg && !isPdf) {
-        setAttachmentError(`"${file.name}" is not a valid format. Only PDF, JPG, and PNG are supported.`);
+        setAttachmentError(`"${file.name}" is not a valid format. Only PDF, JPG, PNG, and WebP are supported.`);
         return;
       }
 
       if (file.size > maxSize) {
-        setAttachmentError(`"${file.name}" exceeds 15 MB size limit.`);
+        setAttachmentError(`"${file.name}" exceeds 5 MB size limit.`);
         return;
       }
 
@@ -892,7 +892,9 @@ export default function ChatPage() {
               att.extractedText = serverPages.map((p) => p.text).join('\n\n');
             }
           } catch (uploadErr) {
-            console.warn('Backend document upload notice:', uploadErr);
+            setAttachmentError(uploadErr instanceof Error ? uploadErr.message : 'Could not upload the document.');
+            setLogoState('error');
+            return;
           }
         }
       }
@@ -926,6 +928,11 @@ export default function ChatPage() {
     if (user && (askMode === 'legal' || askMode === 'document') && targetSessionId) {
       try {
         const updatedChat = await serverApi.chats.sendMessage(targetSessionId, content, askMode);
+        if (updatedChat.outOfScope) {
+          setIsThinking(false);
+          setLogoState('idle');
+          return;
+        }
         const serverMessages = updatedChat.messages || [];
         const lastMsg = serverMessages[serverMessages.length - 1];
 
@@ -977,6 +984,10 @@ export default function ChatPage() {
           }
         );
 
+        if (!response.content) {
+          setLogoState('idle');
+          return;
+        }
         responseCitations = response.citations;
 
         if (response.citations.length === 0 && response.content.includes('cannot find this specific')) {
@@ -1030,7 +1041,10 @@ export default function ChatPage() {
         serverApi.chats
           .update(targetSessionId, {
             title: newTitle,
-            messages: finalizedMessages as unknown as ServerChatMessage[],
+            messages: finalizedMessages.map((message) => ({
+              ...message,
+              attachments: message.attachments?.map(({ id, name, type, size }) => ({ id, name, type, size })),
+            })) as unknown as ServerChatMessage[],
             updatedAt: currentNow,
           })
           .catch((err) => console.warn('Could not sync chat messages to server:', err));
@@ -1137,7 +1151,7 @@ export default function ChatPage() {
           </div>
           <h3 className="font-heading text-2xl font-bold">Drop property documents here</h3>
           <p className="text-sm font-sans text-paper/80 mt-1">
-            Accepts Saf Kabala deed scans, Khatian ledgers, and NID cards (PDF, JPG, PNG up to 15 MB)
+            Accepts Saf Kabala deed scans, Khatian ledgers, and NID cards (PDF, JPG, PNG, or WebP up to 5 MB)
           </p>
         </div>
       )}
@@ -1869,12 +1883,12 @@ export default function ChatPage() {
                 {/* Controls: Paperclip, Sample Docs, Voice Input, Character Counter, Send/Stop */}
                 <div className="flex items-center justify-between pt-1">
                   <div className="flex items-center gap-1.5">
-                    {/* Hidden File Picker (PDF, JPG, PNG up to 15MB, max 3) */}
+                    {/* Hidden File Picker (PDF, JPG, PNG, WebP up to 5 MB, max 3) */}
                     <input
                       ref={fileInputRef}
                       type="file"
                       multiple
-                      accept="image/jpeg,image/png,application/pdf"
+                      accept="image/jpeg,image/png,image/webp,application/pdf"
                       onChange={(e) => handleFiles(e.target.files)}
                       className="hidden"
                     />
@@ -1884,7 +1898,7 @@ export default function ChatPage() {
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="p-1.5 rounded-full text-ink-muted hover:text-green-deep hover:bg-paper-dark transition-colors cursor-pointer"
-                      title="Attach deed scan, khatian or NID (PDF, JPG, PNG up to 15MB)"
+                      title="Attach deed scan, khatian or NID (PDF, JPG, PNG, WebP up to 5 MB)"
                       aria-label="Attach file"
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

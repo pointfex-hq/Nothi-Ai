@@ -7,7 +7,7 @@ export interface ServerUser {
   username: string;
   name?: string;
   role: 'admin' | 'user';
-  status?: 'active' | 'suspended';
+  status?: 'active' | 'suspended' | 'banned';
   createdAt?: number;
   isEnvAccount?: boolean;
 }
@@ -55,6 +55,7 @@ export interface ServerChatMessage {
 }
 
 export interface ServerChat {
+  outOfScope?: true;
   id: string;
   title: string;
   updatedAt: number;
@@ -83,16 +84,18 @@ export interface ServerAdminUser {
   email: string;
   name?: string;
   role: 'admin' | 'user';
-  status: 'active' | 'suspended';
+  status: 'active' | 'suspended' | 'banned';
   createdAt: number;
   isEnvAccount?: boolean;
   chatCount: number;
+  recordedTokensToday: number;
+  recordedTokensTotal: number;
 }
 
 export interface ServerAuditLog {
   id: string;
-  action: 'USER_SUSPENDED' | 'USER_REACTIVATED' | 'USER_DELETED' | 'QUOTA_UPDATED';
-  adminId: string;
+  action: string;
+  adminId: string | null;
   targetId?: string | null;
   details?: string;
   timestamp: number;

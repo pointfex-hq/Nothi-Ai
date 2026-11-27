@@ -234,7 +234,7 @@ export function FiveStagesFlow({ stages }: FiveStagesFlowProps) {
       icon: '📄',
       srs: 'FR-1.1',
       pill: 'Deed Normalization',
-      liveStat: 'Deed + RS Khatian + NID (15 MB Max)',
+      liveStat: 'Deed + RS Khatian + NID (5 MB Max)',
     },
     {
       x: 355,

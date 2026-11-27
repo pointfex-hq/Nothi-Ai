@@ -2,6 +2,7 @@ const { randomUUID } = require('node:crypto');
 const RequestError = require('./request-error');
 const { getUsageLimits } = require('./usage-limit-settings');
 const { runQuotaScript } = require('./quota-redis');
+const { recordTokenReservation, recordTokenReconciliation, listRecordedTokenUsage } = require('./auth-store');
 
 const minuteMs = 60_000;
 const dayMs = 86_400_000;
@@ -64,6 +65,18 @@ const applyReportedUsage = `
   return 1
 `;
 
+const readDailyUsage = `
+  local clock = redis.call('TIME')
+  local resetAt = (math.floor(tonumber(clock[1]) / 86400) + 1) * 86400000
+  local day = redis.call('HMGET', KEYS[1], 'resetAt', 'questions', 'tokens')
+  if tonumber(day[1]) ~= resetAt then return {0, 0, resetAt} end
+  return {tonumber(day[2]) or 0, tonumber(day[3]) or 0, resetAt}
+`;
+
+function quotaPrefix(userId) {
+  return 'nothi:ask:v1:{' + userId + '}';
+}
+
 class AskQuotaError extends RequestError {
   constructor(limit, message, resetAt) {
     super(429, message);
@@ -121,7 +134,7 @@ async function applyQuota(userId, action, reservationId = '', estimatedInputToke
   }
 
   // A hash tag keeps both keys on the same shard on clustered Redis.
-  const prefix = 'nothi:ask:v1:{' + userId + '}';
+  const prefix = quotaPrefix(userId);
   const dayKey = prefix + ':day';
   const [decision, resetAt] = await runQuotaScript(checkAndReserve, [prefix + ':minute', dayKey], [
     action, reservationId, questionsPerMinute, questionsPerDay, dailyTokenBudget, maxOutputTokens, estimatedInputTokens,
@@ -154,18 +167,31 @@ async function reserveAsk(userId, messages) {
   // The free router can select different tokenizers, so use a conservative UTF-8 byte estimate.
   const estimatedInputTokens = Buffer.byteLength(JSON.stringify(messages), 'utf8') + 8 * messages.length;
   const reservationId = randomUUID();
+  const timestamp = Date.now();
   const { dayKey, resetAt, maxOutputTokens } = await applyQuota(userId, 'reserve', reservationId, estimatedInputTokens);
 
+  const reservedTokens = estimatedInputTokens + maxOutputTokens;
+  const username = recordTokenReservation(reservationId, userId, reservedTokens, timestamp);
+  if (!username) throw new RequestError(403, 'Your account is no longer active.');
+
   async function reconcileUsage(usage) {
-    if (!dayKey) return;
     const total = reportedCount(usage?.total_tokens);
     const prompt = reportedCount(usage?.prompt_tokens);
     const completion = reportedCount(usage?.completion_tokens);
     const used = total === null
       ? (prompt ?? estimatedInputTokens) + (completion ?? maxOutputTokens)
       : Math.max(total, (prompt ?? 0) + (completion ?? 0));
+    const accountedTokens = Math.min(used, Number.MAX_SAFE_INTEGER);
+    const reported = total !== null || (prompt !== null && completion !== null);
+    if (!recordTokenReconciliation(reservationId, userId, accountedTokens, reported, username)) return;
+    if (!dayKey) {
+      const day = usageByUser.get(userId)?.day;
+      if (day?.resetAt === resetAt) day.tokens = Math.min(Number.MAX_SAFE_INTEGER, day.tokens - reservedTokens + accountedTokens);
+      return;
+    }
+
     try {
-      await runQuotaScript(applyReportedUsage, [dayKey], [resetAt, reservationId, Math.min(used, Number.MAX_SAFE_INTEGER)]);
+      await runQuotaScript(applyReportedUsage, [dayKey], [resetAt, reservationId, accountedTokens]);
     } catch {
       // The request already reached OpenRouter. Keep the original reservation if Redis cannot reconcile it.
     }
@@ -186,13 +212,17 @@ function sendAskQuotaError(error, response) {
   return true;
 }
 
-function getUserUsage(userId) {
+async function getUserUsage(userId) {
   const limits = getUsageLimits();
   const account = usageByUser.get(userId);
   const now = Date.now();
-  const day = account?.day && account.day.resetAt > now
+  let day = account?.day && account.day.resetAt > now
     ? account.day
     : { questions: 0, tokens: 0, resetAt: Math.floor(now / dayMs) * dayMs + dayMs };
+  if (process.env.REDIS_URL?.trim()) {
+    const [questions, tokens, resetAt] = await runQuotaScript(readDailyUsage, [quotaPrefix(userId) + ':day'], []);
+    day = { questions, tokens, resetAt };
+  }
   return {
     questionsUsed: day.questions,
     questionsLimit: limits.questionsPerDay,
@@ -203,4 +233,9 @@ function getUserUsage(userId) {
   };
 }
 
-module.exports = { checkAskAllowance, recordAskWithoutModel, reserveAsk, sendAskQuotaError, getUserUsage };
+function getRecordedTokenUsage() {
+  const dayStart = Math.floor(Date.now() / dayMs) * dayMs;
+  return new Map(listRecordedTokenUsage(dayStart).map(({ accountId, ...usage }) => [accountId, usage]));
+}
+
+module.exports = { checkAskAllowance, recordAskWithoutModel, reserveAsk, sendAskQuotaError, getUserUsage, getRecordedTokenUsage };

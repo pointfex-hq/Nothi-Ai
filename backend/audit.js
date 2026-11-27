@@ -1,5 +1,11 @@
 const express = require('express');
 
+const { randomUUID } = require('node:crypto');
+const { validatePdf } = require('./pdf');
+const { getUploadMime, readDocument, uploadName, imageLimit, documentTypes, validDocumentExtension,
+  prepareImage, uploadErrors } = require('./document-upload');
+const RequestError = require('./request-error');
+
 const router = express.Router();
 
 // Packet A: Compliant
@@ -312,31 +318,34 @@ const packetBResult = {
   },
 };
 
-router.post('/upload', express.json({ limit: '2mb' }), (req, res) => {
-  const { files = [] } = req.body ?? {};
-  // Classify each file if not already classified
-  const classified = files.map(file => {
-    let type = file.type;
-    if (!type) {
-      const lower = (file.name || '').toLowerCase();
-      if (lower.includes('deed') || lower.includes('kabala')) type = 'deed';
-      else if (lower.includes('khatian') || lower.includes('porcha')) type = 'khatian';
-      else if (lower.includes('nid') || lower.includes('smart')) type = 'nid';
-      else type = 'deed';
-    }
-    return { ...file, type };
-  });
-  res.json(classified);
+router.post('/upload', readDocument, async (request, response) => {
+  const name = uploadName(request);
+  const mimeType = getUploadMime(request);
+  if (mimeType === 'application/pdf') await validatePdf(request.body);
+  else await prepareImage(request.body, mimeType);
+
+  const lower = name.toLowerCase();
+  const type = /khatian|porcha/.test(lower) ? 'khatian' : /nid|smart/.test(lower) ? 'nid' : 'deed';
+  response.json({ id: randomUUID(), name, mimeType, size: request.body.length, type });
 });
 
-router.post('/run', express.json({ limit: '5mb' }), (req, res) => {
-  const { packet, files = [] } = req.body ?? {};
-  if (packet === 'B') {
-    return res.json({ ...packetBResult, timestamp: new Date().toISOString() });
+router.use('/upload', uploadErrors('audit-upload'));
+
+router.post('/run', express.json({ limit: '5mb' }), (request, response) => {
+  const { packet, files = [] } = request.body ?? {};
+  if (!Array.isArray(files) || files.length > 3) {
+    throw new RequestError(400, 'Choose up to three documents.');
   }
-  // Default to Packet A compliant or custom evaluated result
-  return res.json({ ...packetAResult, timestamp: new Date().toISOString() });
+  for (const file of files) {
+    if (!file || typeof file.name !== 'string' || file.name.length > 255 || /[\x00-\x1f\x7f]/u.test(file.name) ||
+      !validDocumentExtension(file.name, file.mimeType)) throw new RequestError(415, documentTypes);
+    if (!Number.isSafeInteger(file.size) || file.size < 1 || file.size > imageLimit) {
+      throw new RequestError(400, 'Each file must be 5 MB or smaller and cannot be empty.');
+    }
+    if (!['deed', 'khatian', 'nid'].includes(file.type)) throw new RequestError(400, 'Choose a valid document type.');
+  }
+  const result = packet === 'B' ? packetBResult : packetAResult;
+  response.json({ ...result, timestamp: new Date().toISOString() });
 });
 
 module.exports = { auditRouter: router };
-
