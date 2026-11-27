@@ -24,6 +24,7 @@ import { ChatSessionMenu } from '@/components/chat/ChatSessionMenu';
 import { DrawerDetailModal } from '@/components/landing/citation-gate/DrawerDetailModal';
 import { useAuth } from '@/lib/auth';
 import { SignInModal } from '@/components/auth/SignInModal';
+import { UserMenu } from '@/components/auth/UserMenu';
 import { sendChatMessage, ChatMessage, ChatAttachment, ChatCitation } from '@/lib/chat';
 import { hasMarkdownStructure, generateFilenameFromHeading } from '@/lib/markdown';
 import { serverApi, ServerChatMessage } from '@/lib/api';
@@ -1242,15 +1243,7 @@ export default function ChatPage() {
 
           {/* User Sign In / Profile Pill */}
           {user ? (
-            <button
-              type="button"
-              onClick={() => setSignInModalOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-border/80 bg-paper hover:bg-paper-dark text-xs font-sans text-ink shadow-2xs hover:border-brass/70 transition-all cursor-pointer"
-              title={`Signed in as ${user.name}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
-              <span className="max-w-[80px] sm:max-w-[120px] truncate">{user.name.replace('Advocate ', 'Adv. ')}</span>
-            </button>
+            <UserMenu />
           ) : (
             <button
               type="button"
