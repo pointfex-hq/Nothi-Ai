@@ -1856,7 +1856,7 @@ export default function ChatPage() {
                   }
                   rows={1}
                   maxLength={1000}
-                  className="w-full bg-transparent resize-none outline-hidden font-sans text-base text-ink placeholder:text-ink-muted/70 leading-relaxed max-h-40"
+                  className="w-full bg-transparent resize-none border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none font-sans text-base text-ink placeholder:text-ink-muted/70 leading-relaxed max-h-40"
                 />
 
                 {/* Controls: Paperclip, Sample Docs, Voice Input, Character Counter, Send/Stop */}

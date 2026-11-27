@@ -136,6 +136,16 @@ body::before {
   outline-offset: 2px;
 }
 
+/* Suppress unwanted browser/focus-visible outline boxes on text inputs and textareas that use custom container focus rings */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none;
+}
+
 /* ── Bangla text ───────────────────────────────────────── */
 .bangla, .font-bangla, [lang="bn"] {
   font-family: var(--font-bangla), 'Noto Serif Bengali', serif !important;

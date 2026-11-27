@@ -107,7 +107,7 @@ export function AskNothiSection() {
                     ? 'দলিল দাখিলের সময়সীমা, খতিয়ান বা এনআইডি সংক্রান্ত প্রশ্ন লিখুন...'
                     : 'Ask about deed timelines, Khatians, Dag numbers, or NID formats...'
                 }
-                className="flex-1 px-4 py-4 sm:py-5 text-sm sm:text-base font-sans text-ink placeholder:text-ink-muted/50 bg-transparent focus:outline-hidden"
+                className="flex-1 px-4 py-4 sm:py-5 text-sm sm:text-base font-sans text-ink placeholder:text-ink-muted/50 bg-transparent border-none outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 shadow-none"
               />
 
               <div className="pr-3">
